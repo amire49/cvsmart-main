@@ -7,7 +7,6 @@ import { Sparkles, ChevronDown, ChevronUp, Search, ArrowRight,  Twitter,
   Linkedin, } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/Input"
-import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
 
 export default function FAQPage() {
@@ -192,9 +191,6 @@ export default function FAQPage() {
 
       {/* Header */}
       <header className="relative z-10 py-12 px-4 border-b border-border backdrop-blur-md">
-        <div className="absolute top-4 right-4 md:top-6 md:right-6">
-          <ThemeToggle />
-        </div>
         <div className="container mx-auto max-w-4xl">
           <div className="flex items-center justify-center mb-6">
             <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">

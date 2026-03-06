@@ -4,7 +4,6 @@ import ProtectedRoute from "@/components/auth/protected-route";
 import DashboardStats from "@/components/dashboard/dashboard-stats";
 import RecentActivity from "@/components/dashboard/recent-activity";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Sparkles } from "lucide-react";
 
 export default function DashboardPage() {
@@ -29,7 +28,6 @@ export default function DashboardPage() {
                   Dashboard
                 </h1>
               </div>
-              <ThemeToggle />
             </div>
 
             <Tabs defaultValue="overview" className="w-full">

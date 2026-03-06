@@ -37,8 +37,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ThemeToggle } from "@/components/theme-toggle";
-
 // Define the Profile type
 type Profile = {
   id: string;
@@ -383,7 +381,6 @@ export default function ProfilePage() {
               My Profile
             </h1>
             <div className="flex items-center gap-4 mt-4 md:mt-0">
-              <ThemeToggle />
               {!editMode ? (
               <Button
                 onClick={() => setEditMode(true)}

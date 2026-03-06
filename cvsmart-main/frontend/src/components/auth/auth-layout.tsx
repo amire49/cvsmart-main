@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Sparkles, ArrowLeft } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 interface AuthLayoutProps {
   children: ReactNode;
@@ -12,9 +11,6 @@ interface AuthLayoutProps {
 export default function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
   return (
     <div className="app-page min-h-screen flex flex-col items-center justify-center bg-background text-foreground overflow-hidden py-8 px-4 sm:px-6 lg:px-8">
-      <div className="absolute top-4 right-4 z-20">
-        <ThemeToggle />
-      </div>
       <Link
         href="/"
         className="absolute top-4 left-4 z-20 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"

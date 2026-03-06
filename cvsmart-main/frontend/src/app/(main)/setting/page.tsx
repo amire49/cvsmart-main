@@ -18,22 +18,22 @@ import { Label } from "@/components/ui/Label";
 import { toast } from "sonner";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Switch } from "@/components/ui/switch";
-import { ThemeToggle } from "@/components/theme-toggle";
-
 export default function SettingsPage() {
   return (
     <ProtectedRoute>
-      <div className="app-page min-h-screen bg-background relative overflow-hidden">
-        {/* Animated Background Orbs */}
-        <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-primary rounded-full filter blur-[150px] opacity-30 animate-[pulse_8s_ease-in-out_infinite]" />
-        <div className="absolute bottom-0 right-0 w-1/3 h-1/3 bg-success rounded-full filter blur-[150px] opacity-30 animate-[pulse_10s_ease-in-out_infinite]" />
+      <div className="app-page min-h-screen bg-background text-foreground overflow-hidden">
+        {/* Animated Background - same as dashboard / other pages */}
+        <div className="fixed inset-0 z-0 pointer-events-none">
+          <div className="absolute top-0 right-0 w-1/3 h-1/3 bg-primary rounded-full filter blur-[150px] opacity-20" />
+          <div className="absolute bottom-0 left-0 w-1/3 h-1/3 bg-success rounded-full filter blur-[150px] opacity-20" />
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1/2 h-1/2 bg-ring rounded-full filter blur-[150px] opacity-10" />
+        </div>
 
         <div className="container mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-4xl font-bold text-foreground">
               Account Settings
             </h1>
-            <ThemeToggle />
           </div>
 
           <Tabs defaultValue="profile" className="w-full">

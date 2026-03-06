@@ -15,41 +15,44 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { Alert, AlertDescription } from "@/components/ui/Alert";
-import { AlertCircle, Check } from "lucide-react";
+import { toast } from "sonner";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Switch } from "@/components/ui/switch";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function SettingsPage() {
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-black relative overflow-hidden">
+      <div className="app-page min-h-screen bg-background relative overflow-hidden">
         {/* Animated Background Orbs */}
-        <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-gradient-to-br from-purple-600 to-cyan-600 rounded-full filter blur-[150px] opacity-30 animate-[pulse_8s_ease-in-out_infinite]"></div>
-        <div className="absolute bottom-0 right-0 w-1/3 h-1/3 bg-gradient-to-br from-fuchsia-600 to-purple-600 rounded-full filter blur-[150px] opacity-30 animate-[pulse_10s_ease-in-out_infinite]"></div>
+        <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-primary rounded-full filter blur-[150px] opacity-30 animate-[pulse_8s_ease-in-out_infinite]" />
+        <div className="absolute bottom-0 right-0 w-1/3 h-1/3 bg-success rounded-full filter blur-[150px] opacity-30 animate-[pulse_10s_ease-in-out_infinite]" />
 
         <div className="container mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10">
-          <h1 className="text-4xl font-bold text-white bg-clip-text">
-            Account Settings
-          </h1>
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-4xl font-bold text-foreground">
+              Account Settings
+            </h1>
+            <ThemeToggle />
+          </div>
 
           <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="mb-6 grid grid-cols-3 bg-white/5 backdrop-blur-lg border border-white/10 rounded-xl p-1">
+            <TabsList className="mb-6 grid grid-cols-3 bg-muted backdrop-blur-lg border border-border rounded-xl p-1">
               <TabsTrigger
                 value="profile"
-                className="text-white/80 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-cyan-600 data-[state=active]:text-white rounded-xl transition-all duration-300 focus:ring-2 focus:ring-cyan-500"
+                className="text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-xl transition-all duration-300 focus:ring-2 focus:ring-ring"
               >
                 Profile
               </TabsTrigger>
               <TabsTrigger
                 value="password"
-                className="text-white/80 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-cyan-600 data-[state=active]:text-white rounded-xl transition-all duration-300 focus:ring-2 focus:ring-cyan-500"
+                className="text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-xl transition-all duration-300 focus:ring-2 focus:ring-ring"
               >
                 Password
               </TabsTrigger>
               <TabsTrigger
                 value="notifications"
-                className="text-white/80 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-cyan-600 data-[state=active]:text-white rounded-xl transition-all duration-300 focus:ring-2 focus:ring-cyan-500"
+                className="text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-xl transition-all duration-300 focus:ring-2 focus:ring-ring"
               >
                 Notifications
               </TabsTrigger>
@@ -77,11 +80,8 @@ function ProfileSettings() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const supabase = createClientComponentClient();
 
-  // Fetch user data on component mount
   useEffect(() => {
     async function loadUserProfile() {
       try {
@@ -90,8 +90,6 @@ function ProfileSettings() {
         } = await supabase.auth.getUser();
         if (user) {
           setEmail(user.email || "");
-          // You would typically fetch the user's profile from your database here
-          // For now, we'll just use the email
         }
       } catch (error) {
         console.error("Error loading user profile:", error);
@@ -104,19 +102,12 @@ function ProfileSettings() {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
-    setMessage(null);
 
     try {
-      // Here you would typically update the user's profile in your database
-      // For this example, we'll just show a success message
-
-      // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      setMessage("Profile updated successfully");
+      toast.success("Your profile has been updated successfully.");
     } catch (err) {
-      setError("Failed to update profile");
+      toast.error("Failed to update profile.");
       console.error(err);
     } finally {
       setLoading(false);
@@ -124,33 +115,19 @@ function ProfileSettings() {
   };
 
   return (
-    <Card className="group bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl shadow-xl hover:bg-white/10 transition-all duration-300 animate-[fadeIn_0.8s_ease-out] hover:shadow-2xl">
+    <Card className="group bg-card backdrop-blur-lg border border-border rounded-2xl shadow-xl hover:bg-accent/30 transition-all duration-300">
       <CardHeader>
-        <CardTitle className="text-white text-lg">
+        <CardTitle className="text-foreground text-lg">
           Profile Information
         </CardTitle>
-        <CardDescription className="text-white/70">
+        <CardDescription className="text-muted-foreground">
           Update your account profile information
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleUpdateProfile} className="space-y-6">
-          {error && (
-            <Alert className="bg-white/5 backdrop-blur-lg border border-red-500/30 text-red-300 rounded-xl animate-[fadeIn_0.5s_ease-out]">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {message && (
-            <Alert className="bg-white/5 backdrop-blur-lg border border-green-500/30 text-green-300 rounded-xl animate-[fadeIn_0.5s_ease-out]">
-              <Check className="h-4 w-4 text-green-300" />
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          )}
-
           <div className="space-y-2">
-            <Label htmlFor="name" className="text-white/90">
+            <Label htmlFor="name" className="text-foreground">
               Full Name
             </Label>
             <Input
@@ -158,12 +135,12 @@ function ProfileSettings() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Your full name"
-              className="bg-white/5 border-white/10 text-white placeholder-white/40 rounded-xl focus:ring-2 focus:ring-cyan-500"
+              className="bg-muted border-input text-foreground placeholder:text-muted-foreground rounded-xl focus:ring-2 focus:ring-ring"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-white/90">
+            <Label htmlFor="email" className="text-foreground">
               Email Address
             </Label>
             <Input
@@ -172,9 +149,9 @@ function ProfileSettings() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled
-              className="bg-white/5 border-white/10 text-white/70 rounded-xl"
+              className="bg-muted border-input text-muted-foreground rounded-xl"
             />
-            <p className="text-sm text-white/70">
+            <p className="text-sm text-muted-foreground">
               To change your email, please contact support.
             </p>
           </div>
@@ -182,7 +159,7 @@ function ProfileSettings() {
           <Button
             type="submit"
             disabled={loading}
-            className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-semibold rounded-xl transition-all duration-300 hover:scale-105 focus:ring-4 focus:ring-cyan-500/50"
+            className="rounded-xl font-semibold"
           >
             {loading ? "Saving..." : "Save Changes"}
           </Button>
@@ -197,18 +174,14 @@ function PasswordSettings() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const supabase = createClientComponentClient();
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
-    setMessage(null);
 
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      toast.error("Passwords do not match");
       setLoading(false);
       return;
     }
@@ -218,22 +191,16 @@ function PasswordSettings() {
         password: newPassword,
       });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
-      setMessage("Password updated successfully");
+      toast.success("Your password has been updated.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message || "Failed to update password");
-        console.error(err);
-      } else {
-        setError("Failed to update password");
-        console.error(err);
-      }
+      const msg = err instanceof Error ? err.message : "Failed to update password";
+      toast.error(msg);
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -241,8 +208,6 @@ function PasswordSettings() {
 
   const handleResetPassword = async () => {
     setLoading(true);
-    setError(null);
-    setMessage(null);
 
     try {
       const {
@@ -257,50 +222,30 @@ function PasswordSettings() {
         redirectTo: `${window.location.origin}/update-password`,
       });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
-      setMessage("Password reset link sent to your email");
+      toast.success("Check your email for the password reset link.");
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message || "Failed to send reset password link");
-        console.error(err);
-      } else {
-        setError("Failed to send reset password link");
-        console.error(err);
-      }
+      const msg = err instanceof Error ? err.message : "Failed to send reset link";
+      toast.error(msg);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Card className="group bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl shadow-xl hover:bg-white/10 transition-all duration-300 animate-[fadeIn_0.8s_ease-out] hover:shadow-2xl">
+    <Card className="group bg-card backdrop-blur-lg border border-border rounded-2xl shadow-xl hover:bg-accent/30 transition-all duration-300">
       <CardHeader>
-        <CardTitle className="text-white text-lg">Password</CardTitle>
-        <CardDescription className="text-white/70">
+        <CardTitle className="text-foreground text-lg">Password</CardTitle>
+        <CardDescription className="text-muted-foreground">
           Update your password or send a password reset link
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <form onSubmit={handleUpdatePassword} className="space-y-6">
-          {error && (
-            <Alert className="bg-white/5 backdrop-blur-lg border border-red-500/30 text-red-300 rounded-xl animate-[fadeIn_0.5s_ease-out]">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {message && (
-            <Alert className="bg-white/5 backdrop-blur-lg border border-green-500/30 text-green-300 rounded-xl animate-[fadeIn_0.5s_ease-out]">
-              <Check className="h-4 w-4 text-green-300" />
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          )}
-
           <div className="space-y-2">
-            <Label htmlFor="current-password" className="text-white/90">
+            <Label htmlFor="current-password" className="text-foreground">
               Current Password
             </Label>
             <Input
@@ -309,12 +254,12 @@ function PasswordSettings() {
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
-              className="bg-white/5 border-white/10 text-white placeholder-white/40 rounded-xl focus:ring-2 focus:ring-cyan-500"
+              className="bg-muted border-input text-foreground placeholder:text-muted-foreground rounded-xl focus:ring-2 focus:ring-ring"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="new-password" className="text-white/90">
+            <Label htmlFor="new-password" className="text-foreground">
               New Password
             </Label>
             <Input
@@ -323,12 +268,12 @@ function PasswordSettings() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
-              className="bg-white/5 border-white/10 text-white placeholder-white/40 rounded-xl focus:ring-2 focus:ring-cyan-500"
+              className="bg-muted border-input text-foreground placeholder:text-muted-foreground rounded-xl focus:ring-2 focus:ring-ring"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="confirm-password" className="text-white/90">
+            <Label htmlFor="confirm-password" className="text-foreground">
               Confirm New Password
             </Label>
             <Input
@@ -337,24 +282,24 @@ function PasswordSettings() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="bg-white/5 border-white/10 text-white placeholder-white/40 rounded-xl focus:ring-2 focus:ring-cyan-500"
+              className="bg-muted border-input text-foreground placeholder:text-muted-foreground rounded-xl focus:ring-2 focus:ring-ring"
             />
           </div>
 
           <Button
             type="submit"
             disabled={loading}
-            className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-semibold rounded-xl transition-all duration-300 hover:scale-105 focus:ring-4 focus:ring-cyan-500/50"
+            className="rounded-xl font-semibold"
           >
             {loading ? "Updating..." : "Update Password"}
           </Button>
         </form>
 
-        <div className="pt-4 border-t border-white/10">
-          <h3 className="text-lg font-medium text-white mb-2">
+        <div className="pt-4 border-t border-border">
+          <h3 className="text-lg font-medium text-foreground mb-2">
             Reset Password
           </h3>
-          <p className="text-sm text-white/70 mb-4">
+          <p className="text-sm text-muted-foreground mb-4">
             If you've forgotten your current password, we can send you a
             password reset link.
           </p>
@@ -362,7 +307,7 @@ function PasswordSettings() {
             variant="outline"
             onClick={handleResetPassword}
             disabled={loading}
-            className="bg-white/5 border-white/10 text-white hover:bg-white/10 transition-colors rounded-xl focus:ring-4 focus:ring-white/30"
+            className="rounded-xl"
           >
             {loading ? "Sending..." : "Send Reset Link"}
           </Button>
@@ -376,63 +321,51 @@ function NotificationSettings() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [marketingEmails, setMarketingEmails] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   const handleSaveNotifications = async () => {
     setLoading(true);
-    setMessage(null);
-
-    // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    setMessage("Notification preferences saved");
+    toast.success("Notification preferences have been updated.");
     setLoading(false);
   };
 
   return (
-    <Card className="group bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl shadow-xl hover:bg-white/10 transition-all duration-300 animate-[fadeIn_0.8s_ease-out] hover:shadow-2xl">
+    <Card className="group bg-card backdrop-blur-lg border border-border rounded-2xl shadow-xl hover:bg-accent/30 transition-all duration-300">
       <CardHeader>
-        <CardTitle className="text-white text-lg">
+        <CardTitle className="text-foreground text-lg">
           Notification Settings
         </CardTitle>
-        <CardDescription className="text-white/70">
+        <CardDescription className="text-muted-foreground">
           Manage how we contact you
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {message && (
-          <Alert className="bg-white/5 backdrop-blur-lg border border-green-500/30 text-green-300 rounded-xl animate-[fadeIn_0.5s_ease-out]">
-            <Check className="h-4 w-4 text-green-300" />
-            <AlertDescription>{message}</AlertDescription>
-          </Alert>
-        )}
-
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-medium text-white">Email Notifications</h3>
-              <p className="text-sm text-white/70">
+              <h3 className="font-medium text-foreground">Email Notifications</h3>
+              <p className="text-sm text-muted-foreground">
                 Receive emails about your account activity
               </p>
             </div>
             <Switch
               checked={emailNotifications}
               onCheckedChange={setEmailNotifications}
-              className="data-[state=checked]:bg-cyan-500"
+              className="data-[state=checked]:bg-success"
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-medium text-white">Marketing Emails</h3>
-              <p className="text-sm text-white/70">
+              <h3 className="font-medium text-foreground">Marketing Emails</h3>
+              <p className="text-sm text-muted-foreground">
                 Receive emails about new features and promotions
               </p>
             </div>
             <Switch
               checked={marketingEmails}
               onCheckedChange={setMarketingEmails}
-              className="data-[state=checked]:bg-cyan-500"
+              className="data-[state=checked]:bg-success"
             />
           </div>
         </div>
@@ -440,7 +373,7 @@ function NotificationSettings() {
         <Button
           onClick={handleSaveNotifications}
           disabled={loading}
-          className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-semibold rounded-xl transition-all duration-300 hover:scale-105 focus:ring-4 focus:ring-cyan-500/50"
+          className="rounded-xl font-semibold"
         >
           {loading ? "Saving..." : "Save Preferences"}
         </Button>

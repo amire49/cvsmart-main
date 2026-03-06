@@ -2,32 +2,26 @@
 
 import type React from "react";
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter } from "next/navigation";
 import { Button } from "../ui/button";
 import { Label } from "../ui/Label";
 import { Input } from "../ui/Input";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../ui/card";
-import { Alert, AlertDescription } from "../ui/Alert";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+
+const inputClass =
+  "bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring rounded-xl h-11";
 
 export default function UpdatePasswordForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasSession, setHasSession] = useState(false);
   const router = useRouter();
   const supabase = createClientComponentClient();
 
-  // Check if user has a valid session
   useEffect(() => {
     const checkSession = async () => {
       const {
@@ -36,11 +30,9 @@ export default function UpdatePasswordForm() {
       setHasSession(!!session);
       setCheckingSession(false);
 
-      // If no session, redirect to login
       if (!session) {
-        router.push(
-          "/login?message=Password reset link is invalid or has expired"
-        );
+        toast.error("Please request a new password reset link.");
+        router.push("/login");
       }
     };
 
@@ -50,10 +42,9 @@ export default function UpdatePasswordForm() {
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      toast.error("Passwords do not match");
       setLoading(false);
       return;
     }
@@ -62,15 +53,14 @@ export default function UpdatePasswordForm() {
       const { error } = await supabase.auth.updateUser({ password });
 
       if (error) {
-        setError(error.message);
+        toast.error(error.message);
         return;
       }
 
-      router.push(
-        "/login?message=Password updated successfully. Please log in with your new password."
-      );
+      toast.success("Sign in with your new password.");
+      router.push("/login");
     } catch (err) {
-      setError("An unexpected error occurred");
+      toast.error("An unexpected error occurred.");
       console.error(err);
     } finally {
       setLoading(false);
@@ -79,73 +69,54 @@ export default function UpdatePasswordForm() {
 
   if (checkingSession) {
     return (
-      <Card className="w-full max-w-md mx-auto">
-        <CardContent className="pt-6 flex justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground mt-3">Checking session…</p>
+      </div>
     );
   }
 
   if (!hasSession) {
-    return null; // We'll redirect in the useEffect
+    return null;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black px-4 py-12 flex items-center justify-center">
-      <Card className="w-full max-w-md bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl text-white shadow-xl">
-        <CardHeader>
-          <CardTitle className="text-2xl bg-gradient-to-r from-purple-400 via-cyan-400 to-fuchsia-400 text-transparent bg-clip-text">
-            Update Password
-          </CardTitle>
-          <CardDescription className="text-white/70">
-            Enter your new password
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleUpdatePassword} className="space-y-4">
-            {error && (
-              <Alert className="border border-red-500 bg-red-500/10 text-red-400">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-white">
-                New Password
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="bg-white/10 text-white border border-white/20 placeholder-white/50 focus:ring-2 focus:ring-cyan-400"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password" className="text-white">
-                Confirm New Password
-              </Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="bg-white/10 text-white border border-white/20 placeholder-white/50 focus:ring-2 focus:ring-cyan-400"
-              />
-            </div>
-            <Button
-              type="submit"
-              className="w-full transition-all duration-300"
-              disabled={loading}
-            >
-              {loading ? "Updating password..." : "Update password"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <form onSubmit={handleUpdatePassword} className="space-y-5">
+      <div className="space-y-2">
+        <Label htmlFor="update-password" className="text-foreground">
+          New password
+        </Label>
+        <Input
+          id="update-password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="At least 6 characters"
+          required
+          className={inputClass}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="update-confirm" className="text-foreground">
+          Confirm new password
+        </Label>
+        <Input
+          id="update-confirm"
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Repeat your password"
+          required
+          className={inputClass}
+        />
+      </div>
+      <Button
+        type="submit"
+        className="w-full rounded-full h-11 font-medium"
+        disabled={loading}
+      >
+        {loading ? "Updating…" : "Update password"}
+      </Button>
+    </form>
   );
 }

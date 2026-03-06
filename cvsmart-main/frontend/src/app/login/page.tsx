@@ -1,34 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import LoginForm from "@/components/auth/login-form";
 import AuthLayout from "@/components/auth/auth-layout";
-import { Alert, AlertDescription } from "@/components/ui/Alert";
-import { AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
-  const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Check for error parameters in the URL hash
-    if (typeof window !== "undefined" && window.location.hash) {
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (hash) {
+      const hashParams = new URLSearchParams(hash.substring(1));
       const errorDescription = hashParams.get("error_description");
-
       if (errorDescription) {
-        setError(decodeURIComponent(errorDescription));
+        toast.error(decodeURIComponent(errorDescription));
       }
     }
   }, []);
 
+  useEffect(() => {
+    const message = searchParams.get("message");
+    if (message) {
+      toast.success(decodeURIComponent(message));
+    }
+  }, [searchParams]);
+
   return (
-    <AuthLayout title="Login to your account">
-      {error && (
-        <Alert variant="error" className="mb-6">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+    <AuthLayout title="Sign in" subtitle="Enter your credentials to access your account">
       <LoginForm />
     </AuthLayout>
   );

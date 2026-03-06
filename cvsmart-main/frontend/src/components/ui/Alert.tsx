@@ -6,11 +6,11 @@ type AlertProps = React.ComponentProps<"div"> & {
 };
 
 const variantClasses = {
-  default: "bg-muted text-foreground border",
-  success: "bg-green-50 text-green-800 border border-green-300",
-  error: "bg-red-50 text-red-800 border border-red-300",
-  warning: "bg-yellow-50 text-yellow-800 border border-yellow-300",
-  info: "bg-blue-50 text-blue-800 border border-blue-300",
+  default: "bg-muted text-foreground border-border",
+  success: "bg-success/10 text-success border border-success/30",
+  error: "bg-destructive/10 text-destructive border border-destructive/30",
+  warning: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30",
+  info: "bg-primary/10 text-primary border border-primary/30",
 };
 
 const Alert = React.forwardRef<HTMLDivElement, AlertProps>(

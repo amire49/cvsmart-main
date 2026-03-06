@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Upload,
   FileText,
-  AlertCircle,
   Sparkles,
   ArrowRight,
   ArrowLeft,
@@ -17,7 +16,9 @@ import {
   Instagram,
   Linkedin,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Analytics } from "@vercel/analytics/next";
 
 interface AnalysisResponse {
@@ -46,10 +47,9 @@ function StepProgressBar({
       aria-label={`Step ${currentStep} of 3: ${STEPS[currentStep - 1].label}`}
       className="relative z-10 w-full max-w-2xl mx-auto"
     >
-      {/* Full-width track line behind circles */}
-      <div className="absolute left-0 right-0 top-5 h-0.5 -translate-y-1/2 bg-white/20" />
+      <div className="absolute left-0 right-0 top-5 h-0.5 -translate-y-1/2 bg-muted" />
       <div
-        className="absolute left-0 top-5 h-0.5 -translate-y-1/2 bg-gradient-to-r from-purple-500 to-cyan-500 transition-all duration-300"
+        className="absolute left-0 top-5 h-0.5 -translate-y-1/2 bg-success transition-all duration-300"
         style={{ width: `${fillPercent}%` }}
       />
       <ol className="relative flex items-start justify-between" role="list">
@@ -65,10 +65,10 @@ function StepProgressBar({
               <div
                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
                   isCompleted
-                    ? "border-transparent bg-gradient-to-br from-purple-500 to-cyan-500 text-white"
+                    ? "border-transparent bg-success text-success-foreground"
                     : isActive
-                      ? "border-transparent bg-gradient-to-br from-purple-500 to-cyan-500 text-white"
-                      : "border-white/30 bg-transparent text-white/50"
+                      ? "border-transparent bg-primary text-primary-foreground"
+                      : "border-border bg-transparent text-muted-foreground"
                 }`}
               >
                 {isCompleted && !isActive ? (
@@ -79,7 +79,7 @@ function StepProgressBar({
               </div>
               <span
                 className={`mt-2 text-sm font-medium ${
-                  isActive ? "text-white" : "text-white/70"
+                  isActive ? "text-foreground" : "text-muted-foreground"
                 }`}
               >
                 {step.label}
@@ -99,7 +99,6 @@ export default function ResumeAnalyzer() {
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState("");
 
   const completedThrough =
     currentStep === 3 ? 2 : currentStep === 2 ? 1 : 0;
@@ -110,7 +109,7 @@ export default function ResumeAnalyzer() {
       const fileSizeMB = selectedFile.size / (1024 * 1024);
 
       if (fileSizeMB > MAX_FILE_SIZE_MB) {
-        setError(`File size exceeds ${MAX_FILE_SIZE_MB}MB.`);
+        toast.error(`Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
         setFile(null);
       } else if (
         ![
@@ -118,10 +117,9 @@ export default function ResumeAnalyzer() {
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ].includes(selectedFile.type)
       ) {
-        setError("Invalid file type. Only PDF and DOCX are allowed.");
+        toast.error("Only PDF and DOCX are allowed.");
         setFile(null);
       } else {
-        setError("");
         setFile(selectedFile);
       }
     }
@@ -129,13 +127,12 @@ export default function ResumeAnalyzer() {
 
   const handleAnalyze = async () => {
     if (!file || !jobDescription.trim()) {
-      setError("Please upload a resume and provide a job description");
+      toast.error("Please upload a resume and provide a job description.");
       return;
     }
 
     setLoading(true);
     setProgress(0);
-    setError("");
 
     const formData = new FormData();
     formData.append("resume", file);
@@ -150,9 +147,10 @@ export default function ResumeAnalyzer() {
       const data: AnalysisResponse = await response.json();
       setAnalysis(data.analysis);
       setCurrentStep(3);
+      toast.success("Analysis complete");
     } catch (err) {
       console.error("Error during analysis:", err);
-      setError("Error while analyzing the resume. Please try again.");
+      toast.error("Please try again.");
     } finally {
       setLoading(false);
     }
@@ -163,33 +161,32 @@ export default function ResumeAnalyzer() {
     setAnalysis("");
     setFile(null);
     setJobDescription("");
-    setError("");
   };
 
   return (
-    <div className="min-h-screen bg-black text-white overflow-hidden">
+    <div className="app-page min-h-screen bg-background text-foreground overflow-hidden">
       {/* Animated Background */}
-      <div className="fixed inset-0 z-0">
-        <div className="absolute top-0 right-0 w-1/3 h-1/3 bg-purple-600 rounded-full filter blur-[150px] opacity-20"></div>
-        <div className="absolute bottom-0 left-0 w-1/3 h-1/3 bg-cyan-500 rounded-full filter blur-[150px] opacity-20"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1/2 h-1/2 bg-fuchsia-500 rounded-full filter blur-[150px] opacity-10"></div>
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute top-0 right-0 w-1/3 h-1/3 bg-primary rounded-full filter blur-[150px] opacity-20" />
+        <div className="absolute bottom-0 left-0 w-1/3 h-1/3 bg-success rounded-full filter blur-[150px] opacity-20" />
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1/2 h-1/2 bg-ring rounded-full filter blur-[150px] opacity-10" />
       </div>
 
       {/* Header */}
-      <header className="relative z-10 py-12 px-4 border-b border-white/10 backdrop-blur-md">
+      <header className="relative z-10 py-12 px-4 border-b border-border backdrop-blur-md">
+        <div className="absolute top-4 right-4 md:top-6 md:right-6">
+          <ThemeToggle />
+        </div>
         <div className="container mx-auto max-w-6xl">
           <div className="flex items-center justify-center mb-6">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-xl flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-primary-foreground" />
             </div>
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold text-center tracking-tight">
-            Resume{" "}
-            <span className="bg-gradient-to-r from-purple-400 via-cyan-400 to-fuchsia-400 text-transparent bg-clip-text">
-              Analyzer
-            </span>
+          <h1 className="text-4xl md:text-5xl font-bold text-center tracking-tight font-sans">
+            Resume <span className="text-display font-serif italic">Analyzer</span>
           </h1>
-          <p className="text-center mt-4 text-white/70 text-lg max-w-2xl mx-auto">
+          <p className="text-center mt-4 text-muted-foreground text-lg max-w-2xl mx-auto">
             Upload your resume and job description to get AI-powered insights
             and recommendations
           </p>
@@ -210,42 +207,42 @@ export default function ResumeAnalyzer() {
           {/* Step 1: Upload CV */}
           {currentStep === 1 && (
             <div className="space-y-6">
-              <Card className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl overflow-hidden">
-                <CardHeader className="border-b border-white/10">
-                  <CardTitle className="text-xl font-semibold text-white">
+              <Card className="backdrop-blur-sm overflow-hidden">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-xl font-semibold">
                     Upload Resume
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-center w-full">
-                    <label className="flex flex-col items-center justify-center w-full h-48 border border-dashed rounded-xl cursor-pointer bg-white/5 hover:bg-white/10 border-white/20 hover:border-purple-500/50 transition-all duration-300">
+                    <label className="flex flex-col items-center justify-center w-full h-48 border border-dashed border-border rounded-xl cursor-pointer bg-muted hover:bg-accent transition-all duration-300">
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
                         {file ? (
                           <>
-                            <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-full flex items-center justify-center mb-4">
-                              <FileText className="w-8 h-8 text-white" />
+                            <div className="w-16 h-16 bg-success rounded-full flex items-center justify-center mb-4">
+                              <FileText className="w-8 h-8 text-primary-foreground" />
                             </div>
-                            <p className="mb-2 text-sm text-white/70">
-                              <span className="font-medium text-white">
+                            <p className="mb-2 text-sm text-muted-foreground">
+                              <span className="font-medium text-foreground">
                                 {file.name}
                               </span>
                             </p>
-                            <p className="text-xs text-white/50">
+                            <p className="text-xs text-muted-foreground">
                               Click to change file
                             </p>
                           </>
                         ) : (
                           <>
-                            <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4">
-                              <Upload className="w-8 h-8 text-white/70" />
+                            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4 border border-border">
+                              <Upload className="w-8 h-8 text-muted-foreground" />
                             </div>
-                            <p className="mb-2 text-sm text-white/70">
-                              <span className="font-medium text-white">
+                            <p className="mb-2 text-sm text-muted-foreground">
+                              <span className="font-medium text-foreground">
                                 Click to upload
                               </span>{" "}
                               or drag and drop
                             </p>
-                            <p className="text-xs text-white/50">
+                            <p className="text-xs text-muted-foreground">
                               PDF or DOCX (MAX. 10MB)
                             </p>
                           </>
@@ -259,22 +256,13 @@ export default function ResumeAnalyzer() {
                       />
                     </label>
                   </div>
-                  {error && (
-                    <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start">
-                      <AlertCircle className="w-5 h-5 text-red-400 mr-2 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm text-red-400">{error}</p>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
               <div className="flex justify-end">
                 <Button
-                  onClick={() => {
-                    setError("");
-                    setCurrentStep(2);
-                  }}
+                  onClick={() => setCurrentStep(2)}
                   disabled={!file}
-                  className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-700 hover:to-cyan-700 text-white border-0 rounded-full px-8 py-6 h-auto text-lg font-medium"
+                  className="rounded-full px-8 py-6 h-auto text-lg font-medium"
                 >
                   Next <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
@@ -285,34 +273,28 @@ export default function ResumeAnalyzer() {
           {/* Step 2: Job description */}
           {currentStep === 2 && (
             <div className="space-y-6">
-              <p className="text-white/80 text-center md:text-left">
+              <p className="text-foreground text-center md:text-left">
                 Paste the job description you want to match your CV against.
               </p>
-              <Card className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl overflow-hidden">
-                <CardHeader className="border-b border-white/10">
-                  <CardTitle className="text-xl font-semibold text-white">
+              <Card className="backdrop-blur-sm overflow-hidden">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-xl font-semibold">
                     Job Description
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-6">
                   <Textarea
                     placeholder="Paste the job description here..."
-                    className="min-h-[200px] bg-white/5 border-white/20 focus:border-purple-500/50 text-white placeholder:text-white/30 resize-none"
+                    className="min-h-[200px] bg-muted border-input text-foreground placeholder:text-muted-foreground focus-visible:ring-ring resize-none"
                     value={jobDescription}
                     onChange={(e) => setJobDescription(e.target.value)}
                   />
                 </CardContent>
               </Card>
-              {error && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start">
-                  <AlertCircle className="w-5 h-5 text-red-400 mr-2 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-400">{error}</p>
-                </div>
-              )}
               {loading && (
                 <div className="space-y-2">
-                  <Progress value={progress} className="h-2 bg-white/10" />
-                  <p className="text-xs text-white/50 text-center">
+                  <Progress value={progress} className="h-2 bg-muted" />
+                  <p className="text-xs text-muted-foreground text-center">
                     {progress < 100
                       ? "Analyzing your resume..."
                       : "Analysis complete!"}
@@ -322,24 +304,21 @@ export default function ResumeAnalyzer() {
               <div className="flex items-center justify-between gap-4">
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setError("");
-                    setCurrentStep(1);
-                  }}
+                  onClick={() => setCurrentStep(1)}
                   disabled={loading}
-                  className="border-white/20 text-white hover:bg-white/10 rounded-full px-6 py-6 h-auto"
+                  className="rounded-full px-6 py-6 h-auto"
                 >
                   <ArrowLeft className="mr-2 h-5 w-5" /> Back
                 </Button>
                 <Button
                   onClick={handleAnalyze}
                   disabled={loading || !file || !jobDescription.trim()}
-                  className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-700 hover:to-cyan-700 text-white border-0 rounded-full px-8 py-6 h-auto text-lg font-medium"
+                  className="rounded-full px-8 py-6 h-auto text-lg font-medium"
                 >
                   {loading ? (
                     <div className="flex items-center">
                       <div className="animate-spin mr-2">
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+                        <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full" />
                       </div>
                       Analyzing
                     </div>
@@ -356,21 +335,21 @@ export default function ResumeAnalyzer() {
           {/* Step 3: Analysis result */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              <Card className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl overflow-hidden">
-                <CardHeader className="border-b border-white/10">
-                  <CardTitle className="text-xl font-semibold text-white">
+              <Card className="backdrop-blur-sm overflow-hidden">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-xl font-semibold">
                     Analysis Results
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="min-h-[400px] max-h-[600px] overflow-y-auto">
                     {analysis ? (
-                      <div className="p-6 prose prose-invert max-w-none">
+                      <div className="p-6 prose prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground">
                         <AnalysisDisplay analysis={analysis} />
                       </div>
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center p-6 min-h-[400px]">
-                        <p className="text-white/40 text-center">
+                        <p className="text-muted-foreground text-center">
                           No results to display.
                         </p>
                       </div>
@@ -382,7 +361,7 @@ export default function ResumeAnalyzer() {
                 <Button
                   variant="outline"
                   onClick={handleStartOver}
-                  className="border-white/20 text-white hover:bg-white/10 rounded-full px-8 py-6 h-auto text-lg font-medium"
+                  className="rounded-full px-8 py-6 h-auto text-lg font-medium"
                 >
                   Start over
                 </Button>
@@ -393,36 +372,36 @@ export default function ResumeAnalyzer() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/10 pt-16 pb-8">
+      <footer className="relative z-10 border-t border-border pt-16 pb-8">
         <div className="container mx-auto px-6 max-w-6xl">
           <div className="flex flex-col items-center space-y-6">
             <div className="flex items-center space-x-2 mb-6">
-              <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-md flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-primary-foreground" />
               </div>
-              <span className="text-xl font-bold tracking-tight">CVSmart</span>
+              <span className="text-xl font-bold tracking-tight text-foreground">CVSmart</span>
             </div>
             <div className="flex space-x-8">
               {[
                 {
                   name: "Twitter",
                   href: "https://twitter.com",
-                  icon: <Twitter className="w-5 h-5 text-white/70" />,
+                  icon: <Twitter className="w-5 h-5 text-muted-foreground" />,
                 },
                 {
                   name: "Facebook",
                   href: "https://facebook.com",
-                  icon: <Facebook className="w-5 h-5 text-white/70" />,
+                  icon: <Facebook className="w-5 h-5 text-muted-foreground" />,
                 },
                 {
                   name: "Instagram",
                   href: "https://instagram.com",
-                  icon: <Instagram className="w-5 h-5 text-white/70" />,
+                  icon: <Instagram className="w-5 h-5 text-muted-foreground" />,
                 },
                 {
                   name: "LinkedIn",
                   href: "https://linkedin.com",
-                  icon: <Linkedin className="w-5 h-5 text-white/70" />,
+                  icon: <Linkedin className="w-5 h-5 text-muted-foreground" />,
                 },
               ].map((social) => (
                 <a
@@ -430,15 +409,14 @@ export default function ResumeAnalyzer() {
                   href={social.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                  className="w-10 h-10 rounded-full bg-muted flex items-center justify-center hover:bg-accent hover:text-accent-foreground transition-colors"
                 >
                   <span className="sr-only">{social.name}</span>
-
                   {social.icon}
                 </a>
               ))}
             </div>
-            <p className="text-white/50 text-sm">
+            <p className="text-muted-foreground text-sm">
               © {new Date().getFullYear()} CVSmart. All rights reserved.
             </p>
           </div>
@@ -449,43 +427,39 @@ export default function ResumeAnalyzer() {
   );
 }
 function AnalysisDisplay({ analysis }: { analysis: string }) {
-  // Process the analysis text to enhance formatting
+  const fg = "var(--foreground)";
+  const accent = "var(--success)";
+  const muted = "var(--muted-foreground)";
   const processedAnalysis = analysis
-    // Replace markdown headers with styled sections
     .replace(
       /^# (.*$)/gm,
-      '<div class="text-2xl font-bold mb-4 text-white">$1</div>'
+      `<div class="text-2xl font-bold mb-4" style="color:${fg}">$1</div>`
     )
     .replace(
       /^## (.*$)/gm,
-      '<div class="text-xl font-semibold mb-2 text-white">$1</div>'
+      `<div class="text-xl font-semibold mb-2" style="color:${fg}">$1</div>`
     )
     .replace(
       /^### (.*$)/gm,
-      '<div class="text-lg font-medium mt-6 mb-3 text-white">$1</div>'
+      `<div class="text-lg font-medium mt-6 mb-3" style="color:${fg}">$1</div>`
     )
-    // Handle bullet points
     .replace(
       /^- (.*$)/gm,
-      '<div class="flex items-start mb-2"><div class="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-2 mr-2"></div><p class="text-white">$1</p></div>'
+      `<div class="flex items-start mb-2"><div class="w-1.5 h-1.5 rounded-full mt-2 mr-2 flex-shrink-0" style="background:${accent}"></div><p style="color:${fg}">$1</p></div>`
     )
-    // Handle numbered lists
     .replace(
       /^(\d+)\. (.*$)/gm,
-      '<div class="flex items-start mb-3"><div class="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center mr-3 flex-shrink-0"><span class="text-xs font-medium text-white">$1</span></div><p class="text-white">$2</p></div>'
+      `<div class="flex items-start mb-3"><div class="w-6 h-6 rounded-full flex items-center justify-center mr-3 flex-shrink-0" style="background:${accent};color:${fg}"><span class="text-xs font-medium">$1</span></div><p style="color:${fg}">$2</p></div>`
     )
-    // Handle bold text (replace ** with styled spans)
     .replace(
       /\*\*(.*?)\*\*/g,
-      '<span class="font-semibold text-purple-400">$1</span>'
+      `<span class="font-semibold" style="color:${accent}">$1</span>`
     )
-    // Preserve emojis and add styling to sections
     .replace(
       /(✅|⚠️|❌|🌟|🔍|🛠️|📊|🔑|✏️|📁|🖋️|🎯)/g,
       '<span class="text-xl mr-1">$1</span>'
     );
 
-  // Split by double newlines to create paragraphs
   const paragraphs = processedAnalysis.split("\n\n");
 
   return (

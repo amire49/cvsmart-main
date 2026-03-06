@@ -17,10 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Textarea } from "@/components/ui/textarea";
-import { Alert, AlertDescription } from "@/components/ui/Alert";
 import {
-  AlertCircle,
-  Check,
   Pencil,
   Briefcase,
   GraduationCap,
@@ -38,7 +35,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 // Define the Profile type
 type Profile = {
@@ -93,15 +92,11 @@ export default function ProfilePage() {
   });
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClientComponentClient();
   const router = useRouter();
-  const { toast } = useToast();
-
   useEffect(() => {
     async function loadUserProfile() {
       try {
@@ -121,6 +116,22 @@ export default function ProfilePage() {
             .single();
 
           if (profileError && profileError.code !== "PGRST116") {
+            if (profileError.code === "PGRST205") {
+              toast.error(
+                "Profile table is missing. Run the SQL in supabase/migrations/001_create_profiles.sql in your Supabase SQL Editor, then refresh."
+              );
+              setProfile({
+                full_name: user.user_metadata?.full_name || user.email?.split("@")[0] || "",
+                title: "Professional Title",
+                location: "City, Country",
+                bio: "Tell us about yourself...",
+                avatar_url: null,
+                skills: [],
+                education: [],
+                experience: [],
+              });
+              return;
+            }
             throw profileError;
           }
 
@@ -160,24 +171,17 @@ export default function ProfilePage() {
         }
       } catch (err) {
         console.error("Error loading user profile:", err);
-        toast({
-          title: "Error loading profile",
-          description:
-            "There was a problem loading your profile. Please try again later.",
-          variant: "destructive",
-        });
+        toast.error("There was a problem loading your profile. Please try again later.");
       } finally {
         setLoading(false);
       }
     }
 
     loadUserProfile();
-  }, [supabase, toast]);
+  }, [supabase]);
 
   const handleSaveProfile = async () => {
     setLoading(true);
-    setError(null);
-    setMessage(null);
 
     try {
       if (!user) throw new Error("User not found");
@@ -202,20 +206,10 @@ export default function ProfilePage() {
 
       if (updateError) throw updateError;
 
-      setMessage("Profile updated successfully");
       setEditMode(false);
-      toast({
-        title: "Profile updated",
-        description: "Your profile has been updated successfully.",
-      });
+      toast.success("Your profile has been updated successfully.");
     } catch (err: any) {
-      setError(err.message || "Failed to update profile");
-      toast({
-        title: "Update failed",
-        description:
-          err.message || "There was a problem updating your profile.",
-        variant: "destructive",
-      });
+      toast.error(err.message || "There was a problem updating your profile.");
       console.error(err);
     } finally {
       setLoading(false);
@@ -240,12 +234,6 @@ export default function ProfilePage() {
         .upload(filePath, file, {
           cacheControl: "3600",
           upsert: true,
-          onUploadProgress: (progress) => {
-            const percent = Math.round(
-              (progress.loaded / progress.total) * 100
-            );
-            setUploadProgress(percent);
-          },
         });
 
       if (uploadError) throw uploadError;
@@ -259,16 +247,13 @@ export default function ProfilePage() {
 
       if (updateError) throw updateError;
       setProfile({ ...profile, avatar_url: publicUrl });
-      toast({
-        title: "Image uploaded",
-        description: "Your profile image has been updated successfully.",
-      });
-    } catch (err: any) {
-      toast({
-        title: "Upload failed",
-        description: err.message || "There was a problem uploading your image.",
-        variant: "destructive",
-      });
+      toast.success("Your profile image has been updated successfully.");
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string"
+          ? (err as { message: string }).message
+          : "There was a problem uploading your image. Check that the profile-images bucket exists and you have permission.";
+      toast.error(message);
       console.error("Error uploading image:", err);
     } finally {
       setUploading(false);
@@ -296,16 +281,9 @@ export default function ProfilePage() {
 
       if (updateError) throw updateError;
       setProfile({ ...profile, avatar_url: null });
-      toast({
-        title: "Image deleted",
-        description: "Your profile image has been removed.",
-      });
+      toast.success("Your profile image has been removed.");
     } catch (err: any) {
-      toast({
-        title: "Delete failed",
-        description: err.message || "There was a problem deleting your image.",
-        variant: "destructive",
-      });
+      toast.error(err.message || "There was a problem deleting your image.");
       console.error("Error deleting image:", err);
     } finally {
       setUploading(false);
@@ -339,10 +317,49 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-black">
-          <div className="container mx-auto py-10 px-4 md:px-6">
-            <div className="flex justify-center items-center h-64">
-              <Loader2 className="h-12 w-12 animate-spin text-cyan-400" />
+        <div className="app-page min-h-screen bg-background relative overflow-hidden">
+          <div className="fixed inset-0 z-0 pointer-events-none">
+            <div className="absolute top-0 right-0 w-1/3 h-1/3 bg-primary rounded-full filter blur-[150px] opacity-20" />
+            <div className="absolute bottom-0 left-0 w-1/3 h-1/3 bg-success rounded-full filter blur-[150px] opacity-20" />
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1/2 h-1/2 bg-ring rounded-full filter blur-[150px] opacity-10" />
+          </div>
+          <div className="container mx-auto py-10 px-4 md:px-6 relative z-10">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-card backdrop-blur-sm border border-border rounded-2xl p-6">
+              <Skeleton className="h-10 w-64 rounded-xl" />
+              <div className="flex gap-3 mt-4 md:mt-0">
+                <Skeleton className="h-10 w-24 rounded-xl" />
+                <Skeleton className="h-10 w-32 rounded-xl" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="space-y-8">
+                <div className="bg-card backdrop-blur-sm border border-border rounded-2xl p-8">
+                  <div className="flex flex-col items-center">
+                    <Skeleton className="h-36 w-36 rounded-full mb-6" />
+                    <Skeleton className="h-6 w-40 rounded-lg mb-2" />
+                    <Skeleton className="h-4 w-28 rounded-lg mb-6" />
+                    <Skeleton className="h-2 w-full rounded-full" />
+                  </div>
+                </div>
+                <div className="bg-card backdrop-blur-sm border border-border rounded-2xl p-6">
+                  <Skeleton className="h-5 w-32 rounded-lg mb-4" />
+                  <Skeleton className="h-2 w-full rounded-full" />
+                </div>
+              </div>
+              <div className="lg:col-span-2 space-y-6">
+                <div className="bg-card backdrop-blur-sm border border-border rounded-2xl p-6">
+                  <Skeleton className="h-6 w-48 rounded-lg mb-4" />
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4].map((i) => (
+                      <Skeleton key={i} className="h-10 w-full rounded-xl" />
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-card backdrop-blur-sm border border-border rounded-2xl p-6">
+                  <Skeleton className="h-6 w-36 rounded-lg mb-4" />
+                  <Skeleton className="h-24 w-full rounded-xl" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -352,20 +369,25 @@ export default function ProfilePage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-black relative overflow-hidden">
-        {/* Animated Background Orbs */}
-        <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-purple-600 rounded-full filter blur-[150px] opacity-20 animate-pulse"></div>
-        <div className="absolute bottom-0 right-0 w-1/3 h-1/3 bg-cyan-600 rounded-full filter blur-[150px] opacity-20 animate-pulse"></div>
+      <div className="app-page min-h-screen bg-background relative overflow-hidden">
+        {/* Animated Background - same as home page */}
+        <div className="fixed inset-0 z-0 pointer-events-none">
+          <div className="absolute top-0 right-0 w-1/3 h-1/3 bg-primary rounded-full filter blur-[150px] opacity-20" />
+          <div className="absolute bottom-0 left-0 w-1/3 h-1/3 bg-success rounded-full filter blur-[150px] opacity-20" />
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1/2 h-1/2 bg-ring rounded-full filter blur-[150px] opacity-10" />
+        </div>
 
         <div className="container mx-auto py-10 px-4 md:px-6 relative z-10">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6">
-            <h1 className="text-4xl font-bold  text-white bg-clip-text">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-card backdrop-blur-sm border border-border rounded-2xl p-6">
+            <h1 className="text-4xl font-bold text-foreground">
               My Profile
             </h1>
-            {!editMode ? (
+            <div className="flex items-center gap-4 mt-4 md:mt-0">
+              <ThemeToggle />
+              {!editMode ? (
               <Button
                 onClick={() => setEditMode(true)}
-                className="mt-4 md:mt-0 group bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white transition-all duration-300 rounded-xl"
+                className="mt-4 md:mt-0 rounded-xl"
               >
                 <Pencil className="mr-2 h-4 w-4" /> Edit Profile
               </Button>
@@ -374,44 +396,31 @@ export default function ProfilePage() {
                 <Button
                   variant="outline"
                   onClick={() => setEditMode(false)}
-                  className="bg-white/10 border-white/20 text-white hover:bg-white/20 transition-colors rounded-xl"
+                  className="rounded-xl"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleSaveProfile}
                   disabled={loading}
-                  className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white transition-all duration-300 rounded-xl"
+                  className="rounded-xl"
                 >
                   {loading ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             )}
+            </div>
           </div>
-
-          {error && (
-            <Alert className="mb-6 bg-white/10 backdrop-blur-sm border border-red-500/20 text-red-400 rounded-xl">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {message && (
-            <Alert className="mb-6 bg-white/10 backdrop-blur-sm border border-green-500/20 text-green-400 rounded-xl">
-              <Check className="h-4 w-4 text-green-400" />
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left column - Profile summary */}
             <div className="space-y-8">
-              <Card className="group bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl hover:bg-white/15 transition-all duration-300">
+              <Card className="group bg-card backdrop-blur-sm border border-border rounded-2xl hover:bg-accent/50 transition-all duration-300">
                 <CardContent className="pt-8">
                   <div className="flex flex-col items-center text-center">
                     {/* Profile Image Section */}
                     <div className="relative mb-6">
-                      <Avatar className="h-36 w-36 border-4 border-white/20 rounded-full">
+                      <Avatar className="h-36 w-36 border-4 border-border rounded-full">
                         {profile.avatar_url ? (
                           <AvatarImage
                             src={profile.avatar_url || "/placeholder.svg"}
@@ -419,7 +428,7 @@ export default function ProfilePage() {
                             className="object-cover rounded-full"
                           />
                         ) : (
-                          <AvatarFallback className="text-3xl bg-gradient-to-r from-purple-600 to-cyan-600 text-white rounded-full">
+                          <AvatarFallback className="text-3xl bg-primary text-primary-foreground rounded-full">
                             {profile.full_name?.substring(0, 2).toUpperCase() ||
                               "?"}
                           </AvatarFallback>
@@ -442,7 +451,7 @@ export default function ProfilePage() {
                               size="sm"
                               onClick={() => fileInputRef.current?.click()}
                               disabled={uploading}
-                              className="bg-white/10 border-white/20 text-white hover:bg-white/20 transition-colors rounded-xl"
+                              className="bg-muted border-border text-foreground hover:bg-border transition-colors rounded-xl"
                             >
                               {uploading ? (
                                 <>
@@ -463,7 +472,7 @@ export default function ProfilePage() {
                                 size="sm"
                                 onClick={handleDeleteImage}
                                 disabled={uploading}
-                                className="bg-red-600/80 hover:bg-red-600 text-white rounded-xl"
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Remove
@@ -475,9 +484,9 @@ export default function ProfilePage() {
                             <div className="w-full mt-3">
                               <Progress
                                 value={uploadProgress}
-                                className="h-2 bg-white/20"
+                                className="h-2 bg-border"
                               />
-                              <p className="text-xs text-center mt-2 text-white/70">
+                              <p className="text-xs text-center mt-2 text-foreground/70">
                                 {uploadProgress}%
                               </p>
                             </div>
@@ -489,7 +498,7 @@ export default function ProfilePage() {
                     {editMode ? (
                       <div className="w-full space-y-6">
                         <div>
-                          <Label htmlFor="full_name" className="text-white/80">
+                          <Label htmlFor="full_name" className="text-foreground/80">
                             Full Name
                           </Label>
                           <Input
@@ -501,11 +510,11 @@ export default function ProfilePage() {
                                 full_name: e.target.value,
                               })
                             }
-                            className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                            className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                           />
                         </div>
                         <div>
-                          <Label htmlFor="title" className="text-white/80">
+                          <Label htmlFor="title" className="text-foreground/80">
                             Professional Title
                           </Label>
                           <Input
@@ -514,11 +523,11 @@ export default function ProfilePage() {
                             onChange={(e) =>
                               setProfile({ ...profile, title: e.target.value })
                             }
-                            className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                            className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                           />
                         </div>
                         <div>
-                          <Label htmlFor="location" className="text-white/80">
+                          <Label htmlFor="location" className="text-foreground/80">
                             Location
                           </Label>
                           <Input
@@ -530,17 +539,17 @@ export default function ProfilePage() {
                                 location: e.target.value,
                               })
                             }
-                            className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                            className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                           />
                         </div>
                       </div>
                     ) : (
                       <>
-                        <h2 className="text-2xl font-bold text-white">
+                        <h2 className="text-2xl font-bold text-foreground">
                           {profile.full_name}
                         </h2>
-                        <p className="text-white/70 mt-2">{profile.title}</p>
-                        <div className="flex items-center mt-3 text-sm text-white/60">
+                        <p className="text-foreground/70 mt-2">{profile.title}</p>
+                        <div className="flex items-center mt-3 text-sm text-foreground/60">
                           <MapPin className="h-4 w-4 mr-2" />
                           <span>{profile.location}</span>
                         </div>
@@ -549,40 +558,40 @@ export default function ProfilePage() {
                   </div>
                 </CardContent>
 
-                <Separator className="bg-white/20" />
+                <Separator className="bg-border" />
 
                 <CardContent className="pt-6">
-                  <h3 className="font-semibold mb-4 text-white">
+                  <h3 className="font-semibold mb-4 text-foreground">
                     Profile Completeness
                   </h3>
-                  <Progress value={completeness} className="h-2 bg-white/20" />
-                  <p className="text-sm text-white/60 mt-2">
+                  <Progress value={completeness} className="h-2 bg-border" />
+                  <p className="text-sm text-foreground/60 mt-2">
                     {completeness}% complete
                   </p>
                 </CardContent>
 
-                <Separator className="bg-white/20" />
+                <Separator className="bg-border" />
 
                 <CardContent className="pt-6">
-                  <h3 className="font-semibold mb-4 text-white">
+                  <h3 className="font-semibold mb-4 text-foreground">
                     Contact Information
                   </h3>
 
                   {editMode ? (
                     <div className="space-y-6">
                       <div>
-                        <Label htmlFor="email" className="text-white/80">
+                        <Label htmlFor="email" className="text-foreground/80">
                           Email
                         </Label>
                         <Input
                           id="email"
                           value={user?.email}
                           disabled
-                          className="bg-white/5 border-white/10 text-white/70 rounded-xl"
+                          className="bg-muted border-border text-foreground/70 rounded-xl"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="phone" className="text-white/80">
+                        <Label htmlFor="phone" className="text-foreground/80">
                           Phone
                         </Label>
                         <Input
@@ -592,11 +601,11 @@ export default function ProfilePage() {
                             setProfile({ ...profile, phone: e.target.value })
                           }
                           placeholder="Your phone number"
-                          className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                          className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="website" className="text-white/80">
+                        <Label htmlFor="website" className="text-foreground/80">
                           Website
                         </Label>
                         <Input
@@ -606,34 +615,34 @@ export default function ProfilePage() {
                             setProfile({ ...profile, website: e.target.value })
                           }
                           placeholder="https://yourwebsite.com"
-                          className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                          className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                         />
                       </div>
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <p className="text-sm text-white">
-                        <span className="font-medium text-white/80">
+                      <p className="text-sm text-foreground">
+                        <span className="font-medium text-foreground/80">
                           Email:
                         </span>{" "}
                         {user?.email}
                       </p>
                       {profile.phone && (
-                        <p className="text-sm text-white">
-                          <span className="font-medium text-white/80">
+                        <p className="text-sm text-foreground">
+                          <span className="font-medium text-foreground/80">
                             Phone:
                           </span>{" "}
                           {profile.phone}
                         </p>
                       )}
                       {profile.website && (
-                        <p className="text-sm flex items-center text-white">
-                          <Globe className="h-4 w-4 mr-2 text-cyan-400" />
+                        <p className="text-sm flex items-center text-foreground">
+                          <Globe className="h-4 w-4 mr-2 text-success" />
                           <a
                             href={profile.website}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-cyan-400 hover:text-cyan-300 transition-colors"
+                            className="text-success hover:text-success/90 transition-colors"
                           >
                             {profile.website.replace(/^https?:\/\//, "")}
                           </a>
@@ -643,17 +652,17 @@ export default function ProfilePage() {
                   )}
                 </CardContent>
 
-                <Separator className="bg-white/20" />
+                <Separator className="bg-border" />
 
                 <CardContent className="pt-6">
-                  <h3 className="font-semibold mb-4 text-white">
+                  <h3 className="font-semibold mb-4 text-foreground">
                     Social Profiles
                   </h3>
 
                   {editMode ? (
                     <div className="space-y-6">
                       <div>
-                        <Label htmlFor="linkedin" className="text-white/80">
+                        <Label htmlFor="linkedin" className="text-foreground/80">
                           LinkedIn
                         </Label>
                         <Input
@@ -663,11 +672,11 @@ export default function ProfilePage() {
                             setProfile({ ...profile, linkedin: e.target.value })
                           }
                           placeholder="https://linkedin.com/in/username"
-                          className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                          className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="github" className="text-white/80">
+                        <Label htmlFor="github" className="text-foreground/80">
                           GitHub
                         </Label>
                         <Input
@@ -677,11 +686,11 @@ export default function ProfilePage() {
                             setProfile({ ...profile, github: e.target.value })
                           }
                           placeholder="https://github.com/username"
-                          className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                          className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="twitter" className="text-white/80">
+                        <Label htmlFor="twitter" className="text-foreground/80">
                           Twitter
                         </Label>
                         <Input
@@ -691,7 +700,7 @@ export default function ProfilePage() {
                             setProfile({ ...profile, twitter: e.target.value })
                           }
                           placeholder="https://twitter.com/username"
-                          className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                          className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                         />
                       </div>
                     </div>
@@ -702,7 +711,7 @@ export default function ProfilePage() {
                           href={profile.linkedin}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                          className="flex items-center text-sm text-success hover:text-success/90 transition-colors"
                         >
                           <Linkedin className="h-4 w-4 mr-2" /> LinkedIn
                         </a>
@@ -713,7 +722,7 @@ export default function ProfilePage() {
                           href={profile.github}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                          className="flex items-center text-sm text-success hover:text-success/90 transition-colors"
                         >
                           <Github className="h-4 w-4 mr-2" /> GitHub
                         </a>
@@ -724,7 +733,7 @@ export default function ProfilePage() {
                           href={profile.twitter}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                          className="flex items-center text-sm text-success hover:text-success/90 transition-colors"
                         >
                           <Twitter className="h-4 w-4 mr-2" /> Twitter
                         </a>
@@ -734,7 +743,7 @@ export default function ProfilePage() {
                         !profile.github &&
                         !profile.twitter &&
                         !editMode && (
-                          <p className="text-sm text-white/60">
+                          <p className="text-sm text-foreground/60">
                             No social profiles added yet
                           </p>
                         )}
@@ -743,14 +752,14 @@ export default function ProfilePage() {
                 </CardContent>
               </Card>
 
-              <Card className="group bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl hover:bg-white/15 transition-all duration-300">
+              <Card className="group bg-card backdrop-blur-sm border border-border rounded-2xl hover:bg-accent/50 transition-all duration-300">
                 <CardHeader>
-                  <CardTitle className="text-white">Skills</CardTitle>
+                  <CardTitle className="text-foreground">Skills</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {editMode ? (
                     <div>
-                      <Label htmlFor="skills" className="text-white/80">
+                      <Label htmlFor="skills" className="text-foreground/80">
                         Skills (comma separated)
                       </Label>
                       <Input
@@ -766,7 +775,7 @@ export default function ProfilePage() {
                           })
                         }
                         placeholder="JavaScript, React, Node.js"
-                        className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                        className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                       />
                     </div>
                   ) : (
@@ -774,13 +783,13 @@ export default function ProfilePage() {
                       {(profile.skills || []).map((skill, index) => (
                         <Badge
                           key={index}
-                          className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white rounded-xl px-3 py-1"
+                          className="bg-primary text-primary-foreground rounded-xl px-3 py-1"
                         >
                           {skill}
                         </Badge>
                       ))}
                       {(!profile.skills || profile.skills.length === 0) && (
-                        <p className="text-sm text-white/60">
+                        <p className="text-sm text-foreground/60">
                           No skills added yet
                         </p>
                       )}
@@ -792,14 +801,14 @@ export default function ProfilePage() {
 
             {/* Right column - Detailed information */}
             <div className="lg:col-span-2 space-y-8">
-              <Card className="group bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl hover:bg-white/15 transition-all duration-300">
+              <Card className="group bg-card backdrop-blur-sm border border-border rounded-2xl hover:bg-accent/50 transition-all duration-300">
                 <CardHeader>
-                  <CardTitle className="text-white">About Me</CardTitle>
+                  <CardTitle className="text-foreground">About Me</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {editMode ? (
                     <div>
-                      <Label htmlFor="bio" className="text-white/80">
+                      <Label htmlFor="bio" className="text-foreground/80">
                         Professional Bio
                       </Label>
                       <Textarea
@@ -809,11 +818,11 @@ export default function ProfilePage() {
                           setProfile({ ...profile, bio: e.target.value })
                         }
                         placeholder="Write a short bio about yourself..."
-                        className="min-h-[150px] bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                        className="min-h-[150px] bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                       />
                     </div>
                   ) : (
-                    <p className="text-white/70">
+                    <p className="text-foreground/70">
                       {profile.bio || "No bio added yet"}
                     </p>
                   )}
@@ -821,35 +830,35 @@ export default function ProfilePage() {
               </Card>
 
               <Tabs defaultValue="experience" className="w-full">
-                <TabsList className="mb-6 grid grid-cols-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-1">
+                <TabsList className="mb-6 grid grid-cols-3 bg-card backdrop-blur-sm border border-border rounded-xl p-1">
                   <TabsTrigger
                     value="experience"
-                    className="text-white/70 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-cyan-600 data-[state=active]:text-white rounded-xl transition-all duration-300"
+                    className="text-foreground/70 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-xl transition-all duration-300"
                   >
                     Experience
                   </TabsTrigger>
                   <TabsTrigger
                     value="education"
-                    className="text-white/70 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-cyan-600 data-[state=active]:text-white rounded-xl transition-all duration-300"
+                    className="text-foreground/70 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-xl transition-all duration-300"
                   >
                     Education
                   </TabsTrigger>
                   <TabsTrigger
                     value="resumes"
-                    className="text-white/70 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-cyan-600 data-[state=active]:text-white rounded-xl transition-all duration-300"
+                    className="text-foreground/70 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-xl transition-all duration-300"
                   >
                     Resumes
                   </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="experience">
-                  <Card className="group bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl hover:bg-white/15 transition-all duration-300">
+                  <Card className="group bg-card backdrop-blur-sm border border-border rounded-2xl hover:bg-accent/50 transition-all duration-300">
                     <CardHeader>
-                      <CardTitle className="flex items-center text-white">
-                        <Briefcase className="mr-2 h-5 w-5 text-cyan-400" />{" "}
+                      <CardTitle className="flex items-center text-foreground">
+                        <Briefcase className="mr-2 h-5 w-5 text-success" />{" "}
                         Work Experience
                       </CardTitle>
-                      <CardDescription className="text-white/60">
+                      <CardDescription className="text-foreground/60">
                         Your professional experience
                       </CardDescription>
                     </CardHeader>
@@ -859,10 +868,10 @@ export default function ProfilePage() {
                           {(profile.experience || []).map((exp, index) => (
                             <div
                               key={index}
-                              className="space-y-6 pb-6 border-b border-white/20 last:border-0"
+                              className="space-y-6 pb-6 border-b border-border last:border-0"
                             >
                               <div>
-                                <Label className="text-white/80">
+                                <Label className="text-foreground/80">
                                   Position
                                 </Label>
                                 <Input
@@ -877,11 +886,11 @@ export default function ProfilePage() {
                                       experience: newExp,
                                     });
                                   }}
-                                  className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                                 />
                               </div>
                               <div>
-                                <Label className="text-white/80">Company</Label>
+                                <Label className="text-foreground/80">Company</Label>
                                 <Input
                                   value={exp.company}
                                   onChange={(e) => {
@@ -894,11 +903,11 @@ export default function ProfilePage() {
                                       experience: newExp,
                                     });
                                   }}
-                                  className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                                 />
                               </div>
                               <div>
-                                <Label className="text-white/80">
+                                <Label className="text-foreground/80">
                                   Duration
                                 </Label>
                                 <Input
@@ -913,11 +922,11 @@ export default function ProfilePage() {
                                       experience: newExp,
                                     });
                                   }}
-                                  className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                                 />
                               </div>
                               <div>
-                                <Label className="text-white/80">
+                                <Label className="text-foreground/80">
                                   Description
                                 </Label>
                                 <Textarea
@@ -932,11 +941,11 @@ export default function ProfilePage() {
                                       experience: newExp,
                                     });
                                   }}
-                                  className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                                 />
                               </div>
                               <Button
-                                variants="destructive"
+                                variant="destructive"
                                 size="sm"
                                 onClick={() => {
                                   const newExp = [
@@ -948,7 +957,7 @@ export default function ProfilePage() {
                                     experience: newExp,
                                   });
                                 }}
-                                className="bg-red-600/80 hover:bg-red-600 text-white rounded-xl"
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl"
                               >
                                 Remove
                               </Button>
@@ -970,7 +979,7 @@ export default function ProfilePage() {
                                 ],
                               });
                             }}
-                            className="bg-white/10 border-white/20 text-white hover:bg-white/20 transition-colors rounded-xl"
+                            className="bg-muted border-border text-foreground hover:bg-border transition-colors rounded-xl"
                           >
                             Add Experience
                           </Button>
@@ -980,25 +989,25 @@ export default function ProfilePage() {
                           {(profile.experience || []).map((exp, index) => (
                             <div
                               key={index}
-                              className="pb-6 border-b border-white/20 last:border-0"
+                              className="pb-6 border-b border-border last:border-0"
                             >
-                              <h3 className="font-semibold text-lg text-white">
+                              <h3 className="font-semibold text-lg text-foreground">
                                 {exp.position}
                               </h3>
                               <div className="flex justify-between items-center mb-2">
-                                <p className="text-white/70">{exp.company}</p>
-                                <p className="text-sm text-white/60">
+                                <p className="text-foreground/70">{exp.company}</p>
+                                <p className="text-sm text-foreground/60">
                                   {exp.duration}
                                 </p>
                               </div>
-                              <p className="text-sm text-white/70">
+                              <p className="text-sm text-foreground/70">
                                 {exp.description}
                               </p>
                             </div>
                           ))}
                           {(!profile.experience ||
                             profile.experience.length === 0) && (
-                            <p className="text-sm text-white/60">
+                            <p className="text-sm text-foreground/60">
                               No experience added yet
                             </p>
                           )}
@@ -1009,13 +1018,13 @@ export default function ProfilePage() {
                 </TabsContent>
 
                 <TabsContent value="education">
-                  <Card className="group bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl hover:bg-white/15 transition-all duration-300">
+                  <Card className="group bg-card backdrop-blur-sm border border-border rounded-2xl hover:bg-accent/50 transition-all duration-300">
                     <CardHeader>
-                      <CardTitle className="flex items-center text-white">
-                        <GraduationCap className="mr-2 h-5 w-5 text-cyan-400" />{" "}
+                      <CardTitle className="flex items-center text-foreground">
+                        <GraduationCap className="mr-2 h-5 w-5 text-success" />{" "}
                         Education
                       </CardTitle>
-                      <CardDescription className="text-white/60">
+                      <CardDescription className="text-foreground/60">
                         Your educational background
                       </CardDescription>
                     </CardHeader>
@@ -1025,10 +1034,10 @@ export default function ProfilePage() {
                           {(profile.education || []).map((edu, index) => (
                             <div
                               key={index}
-                              className="space-y-6 pb-6 border-b border-white/20 last:border-0"
+                              className="space-y-6 pb-6 border-b border-border last:border-0"
                             >
                               <div>
-                                <Label className="text-white/80">Degree</Label>
+                                <Label className="text-foreground/80">Degree</Label>
                                 <Input
                                   value={edu.degree}
                                   onChange={(e) => {
@@ -1041,11 +1050,11 @@ export default function ProfilePage() {
                                       education: newEdu,
                                     });
                                   }}
-                                  className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                                 />
                               </div>
                               <div>
-                                <Label className="text-white/80">
+                                <Label className="text-foreground/80">
                                   Institution
                                 </Label>
                                 <Input
@@ -1060,11 +1069,11 @@ export default function ProfilePage() {
                                       education: newEdu,
                                     });
                                   }}
-                                  className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                                 />
                               </div>
                               <div>
-                                <Label className="text-white/80">Year</Label>
+                                <Label className="text-foreground/80">Year</Label>
                                 <Input
                                   value={edu.year}
                                   onChange={(e) => {
@@ -1077,7 +1086,7 @@ export default function ProfilePage() {
                                       education: newEdu,
                                     });
                                   }}
-                                  className="bg-white/10 border-white/20 text-white placeholder-white/50 rounded-xl"
+                                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground rounded-xl"
                                 />
                               </div>
                               <Button
@@ -1088,7 +1097,7 @@ export default function ProfilePage() {
                                   newEdu.splice(index, 1);
                                   setProfile({ ...profile, education: newEdu });
                                 }}
-                                className="bg-red-600/80 hover:bg-red-600 text-white rounded-xl"
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl"
                               >
                                 Remove
                               </Button>
@@ -1105,7 +1114,7 @@ export default function ProfilePage() {
                                 ],
                               });
                             }}
-                            className="bg-white/10 border-white/20 text-white hover:bg-white/20 transition-colors rounded-xl"
+                            className="bg-muted border-border text-foreground hover:bg-border transition-colors rounded-xl"
                           >
                             Add Education
                           </Button>
@@ -1115,16 +1124,16 @@ export default function ProfilePage() {
                           {(profile.education || []).map((edu, index) => (
                             <div
                               key={index}
-                              className="pb-6 border-b border-white/20 last:border-0"
+                              className="pb-6 border-b border-border last:border-0"
                             >
-                              <h3 className="font-semibold text-lg text-white">
+                              <h3 className="font-semibold text-lg text-foreground">
                                 {edu.degree}
                               </h3>
                               <div className="flex justify-between items-center">
-                                <p className="text-white/70">
+                                <p className="text-foreground/70">
                                   {edu.institution}
                                 </p>
-                                <p className="text-sm text-white/60">
+                                <p className="text-sm text-foreground/60">
                                   {edu.year}
                                 </p>
                               </div>
@@ -1132,7 +1141,7 @@ export default function ProfilePage() {
                           ))}
                           {(!profile.education ||
                             profile.education.length === 0) && (
-                            <p className="text-sm text-white/60">
+                            <p className="text-sm text-foreground/60">
                               No education added yet
                             </p>
                           )}
@@ -1143,19 +1152,19 @@ export default function ProfilePage() {
                 </TabsContent>
 
                 <TabsContent value="resumes">
-                  <Card className="group bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl hover:bg-white/15 transition-all duration-300">
+                  <Card className="group bg-card backdrop-blur-sm border border-border rounded-2xl hover:bg-accent/50 transition-all duration-300">
                     <CardHeader>
-                      <CardTitle className="text-white">My Resumes</CardTitle>
-                      <CardDescription className="text-white/60">
+                      <CardTitle className="text-foreground">My Resumes</CardTitle>
+                      <CardDescription className="text-foreground/60">
                         Manage your uploaded resumes
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-center p-10 border border-white/20 rounded-xl">
-                        <p className="text-white/60 mb-6">
+                      <div className="text-center p-10 border border-border rounded-xl">
+                        <p className="text-foreground/60 mb-6">
                           No resumes uploaded yet
                         </p>
-                        <Button className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white transition-all duration-300 rounded-xl">
+                        <Button className="bg-gradient-to-r  text-foreground transition-all duration-300 rounded-xl">
                           Upload Resume
                         </Button>
                       </div>

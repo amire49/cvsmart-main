@@ -3,7 +3,7 @@ import AuthLayout from "@/components/auth/auth-layout";
 
 export default function UpdatePasswordPage() {
   return (
-    <AuthLayout title="Update your password">
+    <AuthLayout title="Update password" subtitle="Enter your new password below">
       <UpdatePasswordForm />
     </AuthLayout>
   );

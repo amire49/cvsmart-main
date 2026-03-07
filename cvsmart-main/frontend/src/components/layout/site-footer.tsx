@@ -1,7 +1,12 @@
+"use client";
+
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Sparkles, Twitter, Facebook, Instagram, Linkedin } from "lucide-react";
 
 export function SiteFooter() {
+  const t = useTranslations("footer");
+  const tNav = useTranslations("nav");
   return (
     <footer className="relative z-10 border-t border-border pt-16 pb-8">
       <div className="container mx-auto px-6">
@@ -12,13 +17,11 @@ export function SiteFooter() {
                 <Sparkles className="w-5 h-5 text-primary-foreground" />
               </div>
               <span className="text-xl font-bold tracking-tight text-foreground">
-                CVSmart
+                {tNav("brand")}
               </span>
             </Link>
             <p className="text-muted-foreground mb-6 max-w-md">
-              CVSmart uses advanced artificial intelligence to analyze resumes
-              and provide actionable insights to help job seekers land more
-              interviews.
+              {t("tagline")}
             </p>
             <div className="flex space-x-4">
               {[
@@ -42,42 +45,42 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h4 className="text-lg font-semibold mb-6 text-foreground">Product</h4>
+            <h4 className="text-lg font-semibold mb-6 text-foreground">{t("product")}</h4>
             <ul className="space-y-4">
               <li>
                 <Link href="/#features" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Features
+                  {t("features")}
                 </Link>
               </li>
               <li>
                 <Link href="/faq" className="text-muted-foreground hover:text-foreground transition-colors">
-                  FAQ
+                  {t("faq")}
                 </Link>
               </li>
             </ul>
           </div>
 
           <div>
-            <h4 className="text-lg font-semibold mb-6 text-foreground">Team Details</h4>
+            <h4 className="text-lg font-semibold mb-6 text-foreground">{t("teamDetails")}</h4>
             <ul className="space-y-4">
               <li>
                 <Link href="/about" className="text-muted-foreground hover:text-foreground transition-colors">
-                  About
+                  {t("about")}
                 </Link>
               </li>
               <li>
                 <Link href="/contact" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Contact
+                  {t("contact")}
                 </Link>
               </li>
               <li>
                 <Link href="/privacy" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Privacy
+                  {t("privacy")}
                 </Link>
               </li>
               <li>
                 <Link href="/terms" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Terms
+                  {t("terms")}
                 </Link>
               </li>
             </ul>
@@ -86,7 +89,7 @@ export function SiteFooter() {
 
         <div className="border-t border-border pt-8 flex flex-col md:flex-row justify-between items-center">
           <p className="text-muted-foreground text-sm mb-4 md:mb-0">
-            © {new Date().getFullYear()} CVSmart. All rights reserved.
+            © {new Date().getFullYear()} CVSmart. {t("allRightsReserved")}
           </p>
         </div>
       </div>

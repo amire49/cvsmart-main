@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter } from "next/navigation";
 import {
@@ -10,10 +11,10 @@ import {
   LayoutDashboard,
   User,
   Settings,
-  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +26,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function MainNav() {
+  const t = useTranslations("nav");
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -79,7 +81,7 @@ export function MainNav() {
             <Sparkles className="w-5 h-5 text-primary-foreground" />
           </div>
           <span className="text-xl font-bold tracking-tight text-foreground">
-            CVSmart
+            {t("brand")}
           </span>
         </Link>
         </div>
@@ -88,14 +90,27 @@ export function MainNav() {
             href="/#features"
             className="text-muted-foreground hover:text-foreground transition-colors"
           >
-            Features
+            {t("features")}
           </Link>
           <Link
             href="/#how-it-works"
             className="text-muted-foreground hover:text-foreground transition-colors"
           >
-            How It Works
+            {t("howItWorks")}
           </Link>
+          <Link
+            href="/build"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {t("buildCv")}
+          </Link>
+          <Link
+            href="/analyze"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {t("analyze")}
+          </Link>
+          <LanguageSwitcher />
           <ThemeToggle />
           <div className="flex items-center space-x-4 ml-4 justify-end">
             {isLoading ? (
@@ -144,19 +159,19 @@ export function MainNav() {
                   <DropdownMenuItem asChild className="rounded-lg py-2.5 cursor-pointer focus:bg-accent">
                     <Link href="/dashboard" className="flex items-center gap-2">
                       <LayoutDashboard className="h-4 w-4 shrink-0" />
-                      <span>Dashboard</span>
+                      <span>{t("dashboard")}</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild className="rounded-lg py-2.5 cursor-pointer focus:bg-accent">
                     <Link href="/profile" className="flex items-center gap-2">
                       <User className="h-4 w-4 shrink-0" />
-                      <span>Profile</span>
+                      <span>{t("profile")}</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild className="rounded-lg py-2.5 cursor-pointer focus:bg-accent">
                     <Link href="/setting" className="flex items-center gap-2">
                       <Settings className="h-4 w-4 shrink-0" />
-                      <span>Settings</span>
+                      <span>{t("settings")}</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-border my-1" />
@@ -165,7 +180,7 @@ export function MainNav() {
                     className="rounded-lg py-2.5 cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive flex items-center gap-2"
                   >
                     <LogOut className="h-4 w-4 shrink-0" />
-                    <span>Log out</span>
+                    <span>{t("logout")}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -175,10 +190,10 @@ export function MainNav() {
                   href="/login"
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Sign In
+                  {t("signIn")}
                 </Link>
                 <Button size="sm" className="rounded-full px-4" asChild>
-                  <Link href="/signup">Sign Up</Link>
+                  <Link href="/signup">{t("signUp")}</Link>
                 </Button>
               </>
             )}

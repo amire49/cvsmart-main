@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, type ChangeEvent } from "react";
+import React, { useState, useEffect, useRef, type ChangeEvent } from "react";
+import { useTranslations } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,56 +12,167 @@ import {
   ArrowRight,
   ArrowLeft,
   Check,
-  Twitter,
-  Facebook,
-  Instagram,
-  Linkedin,
+  Briefcase,
+  ExternalLink,
+  Download,
+  RefreshCw,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { Analytics } from "@vercel/analytics/next";
 
-interface AnalysisResponse {
-  analysis: string;
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000";
+
+interface StructuredAnalysis {
+  overallScore: number;
+  verdict: string;
+  verdictColor: string;
+  sections: {
+    id: string;
+    label: string;
+    score: number;
+    color: string;
+    icon: string;
+    details: string[];
+  }[];
+  strengths: string[];
+  gaps: string[];
+  recommendation: string;
 }
 
-const MAX_FILE_SIZE_MB = 10; // Maximum file size in MB
+interface JobItem {
+  title: string;
+  company: string;
+  location: string;
+  link: string;
+  snippet: string;
+}
 
-const STEPS = [
-  { id: 1 as const, label: "Upload CV" },
-  { id: 2 as const, label: "Job description" },
-  { id: 3 as const, label: "View results" },
-];
+interface QuizQuestion {
+  question: string;
+  options: { A: string; B: string; C: string; D: string };
+  correct: "A" | "B" | "C" | "D";
+  explanation: string;
+}
 
+const MAX_FILE_SIZE_MB = 10;
+
+/* ---------- Animated Score Ring ---------- */
+function AnimatedScore({
+  target,
+  color,
+  size = 130,
+  stroke = 9,
+}: {
+  target: number;
+  color: string;
+  size?: number;
+  stroke?: number;
+}) {
+  const [current, setCurrent] = useState(0);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const duration = 1400;
+    const start = performance.now();
+    const animate = (now: number) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      setCurrent(Math.round(ease * target));
+      if (progress < 1) rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [target]);
+
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = (current / 100) * circ;
+
+  return (
+    <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={stroke} />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth={stroke}
+        strokeDasharray={`${dash} ${circ}`}
+        strokeLinecap="round"
+        style={{ filter: `drop-shadow(0 0 8px ${color})`, transition: "stroke-dasharray 0.05s" }}
+      />
+      <text
+        x="50%"
+        y="50%"
+        textAnchor="middle"
+        dominantBaseline="central"
+        style={{
+          transform: "rotate(90deg)",
+          transformOrigin: "50% 50%",
+          fill: "currentColor",
+          fontSize: size * 0.22,
+          fontFamily: "monospace",
+          fontWeight: 700,
+        }}
+      >
+        {current}
+      </text>
+    </svg>
+  );
+}
+
+/* ---------- Mini bar ---------- */
+function MiniBar({ score, color }: { score: number; color: string }) {
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setW(score), 200);
+    return () => clearTimeout(t);
+  }, [score]);
+  return (
+    <div className="bg-muted/30 rounded h-1.5 overflow-hidden flex-1">
+      <div
+        className="h-full rounded transition-all duration-1000"
+        style={{ width: `${w}%`, background: color, boxShadow: `0 0 6px ${color}` }}
+      />
+    </div>
+  );
+}
+
+/* ---------- Step Progress ---------- */
 function StepProgressBar({
   currentStep,
   completedThrough,
+  stepLabels,
 }: {
   currentStep: 1 | 2 | 3;
   completedThrough: number;
+  stepLabels: [string, string, string];
 }) {
-  // Fill width: 2 segments between 3 circles -> 50% per completed step
-  const fillPercent = (completedThrough / 2) * 100;
+  const fillPercent = Math.min(100, (completedThrough / 2) * 100);
+  const steps = [
+    { id: 1 as const, label: stepLabels[0] },
+    { id: 2 as const, label: stepLabels[1] },
+    { id: 3 as const, label: stepLabels[2] },
+  ];
   return (
-    <nav
-      aria-label={`Step ${currentStep} of 3: ${STEPS[currentStep - 1].label}`}
-      className="relative z-10 w-full max-w-2xl mx-auto"
-    >
+    <nav aria-label={`Step ${currentStep} of 3`} className="relative z-10 w-full max-w-2xl mx-auto">
       <div className="absolute left-0 right-0 top-5 h-0.5 -translate-y-1/2 bg-muted" />
       <div
         className="absolute left-0 top-5 h-0.5 -translate-y-1/2 bg-success transition-all duration-300"
         style={{ width: `${fillPercent}%` }}
       />
       <ol className="relative flex items-start justify-between" role="list">
-        {STEPS.map((step) => {
+        {steps.map((step) => {
           const isCompleted = completedThrough >= step.id;
           const isActive = currentStep === step.id;
           return (
-            <li
-              key={step.id}
-              className="flex flex-1 flex-col items-center"
-              aria-current={isActive ? "step" : undefined}
-            >
+            <li key={step.id} className="flex flex-1 flex-col items-center" aria-current={isActive ? "step" : undefined}>
               <div
                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
                   isCompleted
@@ -70,19 +182,9 @@ function StepProgressBar({
                       : "border-border bg-transparent text-muted-foreground"
                 }`}
               >
-                {isCompleted && !isActive ? (
-                  <Check className="h-5 w-5" aria-hidden />
-                ) : (
-                  <span className="text-sm font-semibold">{step.id}</span>
-                )}
+                {isCompleted && !isActive ? <Check className="h-5 w-5" /> : <span className="text-sm font-semibold">{step.id}</span>}
               </div>
-              <span
-                className={`mt-2 text-sm font-medium ${
-                  isActive ? "text-foreground" : "text-muted-foreground"
-                }`}
-              >
-                {step.label}
-              </span>
+              <span className={`mt-2 text-sm font-medium ${isActive ? "text-foreground" : "text-muted-foreground"}`}>{step.label}</span>
             </li>
           );
         })}
@@ -92,31 +194,39 @@ function StepProgressBar({
 }
 
 export default function ResumeAnalyzer() {
+  const t = useTranslations("analyze");
+  const tCommon = useTranslations("common");
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [file, setFile] = useState<File | null>(null);
   const [jobDescription, setJobDescription] = useState("");
   const [analysis, setAnalysis] = useState("");
+  const [structured, setStructured] = useState<StructuredAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [jobs, setJobs] = useState<JobItem[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(false);
+  const [downloadingCv, setDownloadingCv] = useState(false);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, "A" | "B" | "C" | "D">>({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [loadingQuiz, setLoadingQuiz] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "breakdown" | "actions">("overview");
+  const [hoveredSection, setHoveredSection] = useState<string | null>(null);
 
-  const completedThrough =
-    currentStep === 3 ? 2 : currentStep === 2 ? 1 : 0;
+  const completedThrough = currentStep === 3 ? 3 : currentStep === 2 ? 1 : 0;
+  const stepLabels: [string, string, string] = [t("stepUpload"), t("stepJobDesc"), t("stepResults")];
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const selectedFile = e.target.files[0];
       const fileSizeMB = selectedFile.size / (1024 * 1024);
-
       if (fileSizeMB > MAX_FILE_SIZE_MB) {
-        toast.error(`Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
+        toast.error(t("errorMaxSize", { max: MAX_FILE_SIZE_MB }));
         setFile(null);
       } else if (
-        ![
-          "application/pdf",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ].includes(selectedFile.type)
+        !["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(selectedFile.type)
       ) {
-        toast.error("Only PDF and DOCX are allowed.");
+        toast.error(t("errorFileType"));
         setFile(null);
       } else {
         setFile(selectedFile);
@@ -126,30 +236,31 @@ export default function ResumeAnalyzer() {
 
   const handleAnalyze = async () => {
     if (!file || !jobDescription.trim()) {
-      toast.error("Please upload a resume and provide a job description.");
+      toast.error(t("errorUploadAndJob"));
       return;
     }
-
     setLoading(true);
     setProgress(0);
-
     const formData = new FormData();
     formData.append("resume", file);
     formData.append("jobDescription", jobDescription);
-
+    const headers: Record<string, string> = {};
+    if (process.env.NEXT_PUBLIC_API_KEY) headers["X-API-KEY"] = process.env.NEXT_PUBLIC_API_KEY;
     try {
-      const response = await fetch("http://127.0.0.1:5000/analyze", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data: AnalysisResponse = await response.json();
-      setAnalysis(data.analysis);
+      const response = await fetch(`${API_BASE}/analyze`, { method: "POST", body: formData, headers });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error((data as { error?: string }).error || t("errorTryAgain"));
+        return;
+      }
+      setAnalysis((data as { analysis: string }).analysis || "");
+      setStructured((data as { structured?: StructuredAnalysis }).structured || null);
+      setActiveTab("overview");
       setCurrentStep(3);
-      toast.success("Analysis complete");
+      toast.success(t("toastAnalysisComplete"));
     } catch (err) {
       console.error("Error during analysis:", err);
-      toast.error("Please try again.");
+      toast.error("Cannot reach the server. Is the backend running at " + API_BASE + "?");
     } finally {
       setLoading(false);
     }
@@ -158,20 +269,97 @@ export default function ResumeAnalyzer() {
   const handleStartOver = () => {
     setCurrentStep(1);
     setAnalysis("");
+    setStructured(null);
     setFile(null);
     setJobDescription("");
+    setJobs([]);
+    setQuizQuestions([]);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setActiveTab("overview");
   };
+
+  const handleGetJobRecommendations = async () => {
+    if (!file) { toast.error(t("errorUploadAndJob")); return; }
+    setLoadingJobs(true);
+    setJobs([]);
+    const formData = new FormData();
+    formData.append("resume", file);
+    try {
+      const response = await fetch(`${API_BASE}/jobs/recommend`, {
+        method: "POST", body: formData,
+        headers: process.env.NEXT_PUBLIC_API_KEY ? { "X-API-KEY": process.env.NEXT_PUBLIC_API_KEY } : undefined,
+      } as RequestInit);
+      const data = await response.json();
+      if (!response.ok) { toast.error(data.error || t("errorTryAgain")); return; }
+      setJobs(data.jobs || []);
+      if (!(data.jobs?.length)) toast.success("No jobs found for your profile.");
+    } catch { toast.error(t("errorTryAgain")); } finally { setLoadingJobs(false); }
+  };
+
+  const handleDownloadImprovedCv = async () => {
+    if (!file || !jobDescription.trim()) return;
+    setDownloadingCv(true);
+    const formData = new FormData();
+    formData.append("resume", file);
+    formData.append("jobDescription", jobDescription);
+    if (analysis) formData.append("analysis", analysis);
+    const headers: Record<string, string> = {};
+    if (process.env.NEXT_PUBLIC_API_KEY) headers["X-API-KEY"] = process.env.NEXT_PUBLIC_API_KEY;
+    try {
+      const response = await fetch(`${API_BASE}/cv/improve`, { method: "POST", body: formData, headers });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        toast.error((data as { error?: string }).error || t("errorTryAgain"));
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "improved_cv.docx";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Download started");
+    } catch { toast.error(t("errorTryAgain")); } finally { setDownloadingCv(false); }
+  };
+
+  const handleStartAssessment = async () => {
+    if (!jobDescription.trim()) { toast.error(t("errorUploadAndJob")); return; }
+    setLoadingQuiz(true);
+    setQuizQuestions([]);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    const formData = new FormData();
+    formData.append("jobDescription", jobDescription);
+    if (file) formData.append("resume", file);
+    const headers: Record<string, string> = {};
+    if (process.env.NEXT_PUBLIC_API_KEY) headers["X-API-KEY"] = process.env.NEXT_PUBLIC_API_KEY;
+    try {
+      const response = await fetch(`${API_BASE}/assess/generate`, { method: "POST", body: formData, headers });
+      const data = await response.json();
+      if (!response.ok) { toast.error((data as { error?: string }).error || t("errorTryAgain")); return; }
+      const questions = (data.questions as QuizQuestion[]) || [];
+      if ((data as { error?: string }).error && questions.length === 0) toast.error((data as { error?: string }).error);
+      setQuizQuestions(questions);
+    } catch { toast.error(t("errorTryAgain")); } finally { setLoadingQuiz(false); }
+  };
+
+  const handleQuizSubmit = () => setQuizSubmitted(true);
+
+  const quizScore =
+    quizSubmitted && quizQuestions.length > 0 ? quizQuestions.filter((q, i) => quizAnswers[i] === q.correct).length : 0;
+
+  const s = structured;
 
   return (
     <div className="app-page min-h-screen bg-background text-foreground overflow-hidden">
-      {/* Animated Background */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 right-0 w-1/3 h-1/3 bg-primary rounded-full filter blur-[150px] opacity-20" />
         <div className="absolute bottom-0 left-0 w-1/3 h-1/3 bg-success rounded-full filter blur-[150px] opacity-20" />
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1/2 h-1/2 bg-ring rounded-full filter blur-[150px] opacity-10" />
       </div>
 
-      {/* Header */}
       <header className="relative z-10 py-12 px-4 border-b border-border backdrop-blur-md">
         <div className="container mx-auto max-w-6xl">
           <div className="flex items-center justify-center mb-6">
@@ -180,294 +368,402 @@ export default function ResumeAnalyzer() {
             </div>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-center tracking-tight font-sans">
-            Resume <span className="text-display font-serif italic">Analyzer</span>
+            {t("title")} <span className="text-display font-serif italic">{t("titleItalic")}</span>
           </h1>
-          <p className="text-center mt-4 text-muted-foreground text-lg max-w-2xl mx-auto">
-            Upload your resume and job description to get AI-powered insights
-            and recommendations
-          </p>
+          <p className="text-center mt-4 text-muted-foreground text-lg max-w-2xl mx-auto">{t("subtitle")}</p>
         </div>
       </header>
 
-      {/* Step Progress Bar */}
       <div className="relative z-10 container mx-auto max-w-6xl px-4 pt-8">
-        <StepProgressBar
-          currentStep={currentStep}
-          completedThrough={completedThrough}
-        />
+        <StepProgressBar currentStep={currentStep} completedThrough={completedThrough} stepLabels={stepLabels} />
       </div>
 
-      {/* Main Content - Step-based */}
       <main className="relative z-10 container mx-auto max-w-6xl p-6 md:p-8 pb-12">
-        <div className="max-w-2xl mx-auto">
-          {/* Step 1: Upload CV */}
-          {currentStep === 1 && (
-            <div className="space-y-6">
-              <Card className="backdrop-blur-sm overflow-hidden">
-                <CardHeader className="border-b border-border">
-                  <CardTitle className="text-xl font-semibold">
-                    Upload Resume
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-center w-full">
-                    <label className="flex flex-col items-center justify-center w-full h-48 border border-dashed border-border rounded-xl cursor-pointer bg-muted hover:bg-accent transition-all duration-300">
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        {file ? (
-                          <>
-                            <div className="w-16 h-16 bg-success rounded-full flex items-center justify-center mb-4">
-                              <FileText className="w-8 h-8 text-primary-foreground" />
-                            </div>
-                            <p className="mb-2 text-sm text-muted-foreground">
-                              <span className="font-medium text-foreground">
-                                {file.name}
-                              </span>
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Click to change file
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4 border border-border">
-                              <Upload className="w-8 h-8 text-muted-foreground" />
-                            </div>
-                            <p className="mb-2 text-sm text-muted-foreground">
-                              <span className="font-medium text-foreground">
-                                Click to upload
-                              </span>{" "}
-                              or drag and drop
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              PDF or DOCX (MAX. 10MB)
-                            </p>
-                          </>
-                        )}
-                      </div>
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept=".pdf,.docx"
-                        onChange={handleFileChange}
-                      />
-                    </label>
-                  </div>
-                </CardContent>
-              </Card>
-              <div className="flex justify-end">
-                <Button
-                  onClick={() => setCurrentStep(2)}
-                  disabled={!file}
-                  className="rounded-full px-8 py-6 h-auto text-lg font-medium"
-                >
-                  Next <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Job description */}
-          {currentStep === 2 && (
-            <div className="space-y-6">
-              <p className="text-foreground text-center md:text-left">
-                Paste the job description you want to match your CV against.
-              </p>
-              <Card className="backdrop-blur-sm overflow-hidden">
-                <CardHeader className="border-b border-border">
-                  <CardTitle className="text-xl font-semibold">
-                    Job Description
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <Textarea
-                    placeholder="Paste the job description here..."
-                    className="min-h-[200px] bg-muted border-input text-foreground placeholder:text-muted-foreground focus-visible:ring-ring resize-none"
-                    value={jobDescription}
-                    onChange={(e) => setJobDescription(e.target.value)}
-                  />
-                </CardContent>
-              </Card>
-              {loading && (
-                <div className="space-y-2">
-                  <Progress value={progress} className="h-2 bg-muted" />
-                  <p className="text-xs text-muted-foreground text-center">
-                    {progress < 100
-                      ? "Analyzing your resume..."
-                      : "Analysis complete!"}
-                  </p>
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setCurrentStep(1)}
-                  disabled={loading}
-                  className="rounded-full px-6 py-6 h-auto"
-                >
-                  <ArrowLeft className="mr-2 h-5 w-5" /> Back
-                </Button>
-                <Button
-                  onClick={handleAnalyze}
-                  disabled={loading || !file || !jobDescription.trim()}
-                  className="rounded-full px-8 py-6 h-auto text-lg font-medium"
-                >
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin mr-2">
-                        <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full" />
-                      </div>
-                      Analyzing
-                    </div>
-                  ) : (
-                    <>
-                      Analyze <ArrowRight className="ml-2 h-5 w-5" />
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Analysis result */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              <Card className="backdrop-blur-sm overflow-hidden">
-                <CardHeader className="border-b border-border">
-                  <CardTitle className="text-xl font-semibold">
-                    Analysis Results
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="min-h-[400px] max-h-[600px] overflow-y-auto">
-                    {analysis ? (
-                      <div className="p-6 prose prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground">
-                        <AnalysisDisplay analysis={analysis} />
-                      </div>
+        {/* ---- Step 1 ---- */}
+        {currentStep === 1 && (
+          <div className="max-w-2xl mx-auto space-y-6">
+            <Card className="backdrop-blur-sm overflow-hidden">
+              <CardHeader className="border-b border-border">
+                <CardTitle className="text-xl font-semibold">{t("uploadResume")}</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <label className="flex flex-col items-center justify-center w-full h-48 border border-dashed border-border rounded-xl cursor-pointer bg-muted hover:bg-accent transition-all duration-300">
+                  <div className="flex flex-col items-center pt-5 pb-6">
+                    {file ? (
+                      <>
+                        <div className="w-16 h-16 bg-success rounded-full flex items-center justify-center mb-4">
+                          <FileText className="w-8 h-8 text-primary-foreground" />
+                        </div>
+                        <p className="mb-2 text-sm"><span className="font-medium text-foreground">{file.name}</span></p>
+                        <p className="text-xs text-muted-foreground">{t("clickToChange")}</p>
+                      </>
                     ) : (
-                      <div className="h-full flex flex-col items-center justify-center p-6 min-h-[400px]">
-                        <p className="text-muted-foreground text-center">
-                          No results to display.
-                        </p>
-                      </div>
+                      <>
+                        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4 border border-border">
+                          <Upload className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                        <p className="mb-2 text-sm text-muted-foreground"><span className="font-medium text-foreground">{t("clickToUpload")}</span> {t("orDragDrop")}</p>
+                        <p className="text-xs text-muted-foreground">{t("pdfOrDocx")}</p>
+                      </>
                     )}
                   </div>
+                  <input type="file" className="hidden" accept=".pdf,.docx" onChange={handleFileChange} />
+                </label>
+              </CardContent>
+            </Card>
+            <div className="flex justify-end">
+              <Button onClick={() => setCurrentStep(2)} disabled={!file} className="rounded-full px-8 py-6 h-auto text-lg font-medium">
+                {t("next")} <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ---- Step 2 ---- */}
+        {currentStep === 2 && (
+          <div className="max-w-2xl mx-auto space-y-6">
+            <p className="text-foreground text-center md:text-left">{t("pasteJobDesc")}</p>
+            <Card className="backdrop-blur-sm overflow-hidden">
+              <CardHeader className="border-b border-border">
+                <CardTitle className="text-xl font-semibold">{t("jobDescription")}</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <Textarea
+                  placeholder={t("placeholderJobDesc")}
+                  className="min-h-[200px] bg-muted border-input text-foreground placeholder:text-muted-foreground resize-none"
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                />
+              </CardContent>
+            </Card>
+            {loading && (
+              <div className="space-y-2">
+                <Progress value={progress} className="h-2 bg-muted" />
+                <p className="text-xs text-muted-foreground text-center">{progress < 100 ? t("analyzingResume") : t("analysisComplete")}</p>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-4">
+              <Button variant="outline" onClick={() => setCurrentStep(1)} disabled={loading} className="rounded-full px-6 py-6 h-auto">
+                <ArrowLeft className="mr-2 h-5 w-5" /> {t("back")}
+              </Button>
+              <Button onClick={handleAnalyze} disabled={loading || !file || !jobDescription.trim()} className="rounded-full px-8 py-6 h-auto text-lg font-medium">
+                {loading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin mr-2"><div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full" /></div>
+                    {t("analyzing")}
+                  </div>
+                ) : (
+                  <>{t("analyzeButton")} <ArrowRight className="ml-2 h-5 w-5" /></>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ---- Step 3: Results ---- */}
+        {currentStep === 3 && (
+          <div className="space-y-6">
+            {s ? (
+              <>
+                {/* Hero row */}
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-7">
+                    <p className="text-xs tracking-widest uppercase text-muted-foreground mb-1">Applying for</p>
+                    <h2 className="text-2xl font-semibold tracking-tight text-foreground">{jobDescription.split("\n")[0].slice(0, 80)}</h2>
+                    <div className="mt-4 flex items-center gap-3">
+                      <span
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg px-3 py-1.5"
+                        style={{ background: `${s.verdictColor}18`, border: `1px solid ${s.verdictColor}40`, color: s.verdictColor }}
+                      >
+                        ⬡ {s.verdict}
+                      </span>
+                      <span className="text-sm text-muted-foreground">Based on 4 weighted dimensions</span>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm px-8 py-6 flex flex-col items-center gap-2 min-w-[180px]">
+                    <p className="text-[11px] tracking-widest uppercase text-muted-foreground">Overall Match</p>
+                    <AnimatedScore target={s.overallScore} color="#00e5a0" />
+                    <p className="text-xs text-muted-foreground">out of 100</p>
+                  </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex gap-1 p-1 rounded-xl bg-muted/30 border border-border w-fit">
+                  {(["overview", "breakdown", "actions"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+                        activeTab === tab
+                          ? "bg-success/15 text-success outline outline-1 outline-success/25"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* OVERVIEW */}
+                {activeTab === "overview" && (
+                  <div className="space-y-5 animate-in fade-in duration-300">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      {s.sections.map((sec) => (
+                        <div
+                          key={sec.id}
+                          onMouseEnter={() => setHoveredSection(sec.id)}
+                          onMouseLeave={() => setHoveredSection(null)}
+                          className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-5 transition-all hover:-translate-y-0.5"
+                          style={{ borderColor: hoveredSection === sec.id ? `${sec.color}60` : undefined }}
+                        >
+                          <div className="flex justify-between items-start mb-3">
+                            <span className="text-xl">{sec.icon}</span>
+                            <span className="font-mono text-xl font-bold" style={{ color: sec.color }}>{sec.score}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground font-medium mb-2">{sec.label}</p>
+                          <MiniBar score={sec.score} color={sec.color} />
+                          {hoveredSection === sec.id && (
+                            <ul className="mt-3 space-y-1">
+                              {sec.details.map((d) => (
+                                <li key={d} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                                  <span style={{ color: sec.color }} className="text-[8px]">◆</span>{d}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-6">
+                        <h3 className="text-xs tracking-widest uppercase text-success mb-4 flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-success" /> Strengths
+                        </h3>
+                        {s.strengths.map((str, i) => (
+                          <div key={i} className="flex gap-3 mb-3 items-start">
+                            <span className="text-success text-base shrink-0">↗</span>
+                            <p className="text-sm text-muted-foreground leading-relaxed">{str}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-6">
+                        <h3 className="text-xs tracking-widest uppercase text-destructive mb-4 flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-destructive" /> Gaps
+                        </h3>
+                        {s.gaps.map((g, i) => (
+                          <div key={i} className="flex gap-3 mb-3 items-start">
+                            <span className="text-destructive text-base shrink-0">↘</span>
+                            <p className="text-sm text-muted-foreground leading-relaxed">{g}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-6" style={{ borderColor: `${s.verdictColor}30`, background: `${s.verdictColor}08` }}>
+                      <h3 className="text-xs tracking-widest uppercase mb-3" style={{ color: s.verdictColor }}>AI Recommendation</h3>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{s.recommendation}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* BREAKDOWN */}
+                {activeTab === "breakdown" && (
+                  <div className="space-y-4 animate-in fade-in duration-300">
+                    {s.sections.map((sec) => (
+                      <div key={sec.id} className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-6">
+                        <div className="flex items-center gap-4 mb-4">
+                          <span className="text-2xl">{sec.icon}</span>
+                          <div className="flex-1">
+                            <div className="flex justify-between mb-2">
+                              <span className="font-semibold text-foreground">{sec.label}</span>
+                              <span className="font-mono font-bold" style={{ color: sec.color }}>{sec.score}/100</span>
+                            </div>
+                            <MiniBar score={sec.score} color={sec.color} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {sec.details.map((d) => (
+                            <div key={d} className="bg-muted/30 rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
+                              <span style={{ color: sec.color }} className="text-[8px]">◆</span>{d}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ACTIONS */}
+                {activeTab === "actions" && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
+                    <button
+                      onClick={handleDownloadImprovedCv}
+                      disabled={downloadingCv}
+                      className="rounded-2xl border border-success/30 bg-success/5 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-success/50 disabled:opacity-60"
+                    >
+                      <div className="w-11 h-11 rounded-xl bg-success/15 border border-success/30 flex items-center justify-center mb-4">
+                        <Download className="h-5 w-5 text-success" />
+                      </div>
+                      <h3 className="text-base font-semibold text-foreground mb-1">
+                        {downloadingCv ? tCommon("loading") : t("downloadImprovedCv")}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">Get AI-improved CV as DOCX aligned to the job description</p>
+                    </button>
+                    <button
+                      onClick={handleStartOver}
+                      className="rounded-2xl border border-border bg-card/60 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-border"
+                    >
+                      <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-4">
+                        <RefreshCw className="h-5 w-5 text-amber-500" />
+                      </div>
+                      <h3 className="text-base font-semibold text-foreground mb-1">{t("startOver")}</h3>
+                      <p className="text-sm text-muted-foreground">Match this CV against a different job description</p>
+                    </button>
+                    <button
+                      onClick={handleGetJobRecommendations}
+                      disabled={loadingJobs}
+                      className="rounded-2xl border border-border bg-card/60 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-border disabled:opacity-60"
+                    >
+                      <div className="w-11 h-11 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center mb-4">
+                        <Search className="h-5 w-5 text-violet-500" />
+                      </div>
+                      <h3 className="text-base font-semibold text-foreground mb-1">
+                        {loadingJobs ? tCommon("loading") : t("getJobRecommendations")}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">Discover jobs that match your experience</p>
+                    </button>
+                    <button
+                      onClick={handleStartAssessment}
+                      disabled={loadingQuiz || !jobDescription.trim()}
+                      className="rounded-2xl border border-border bg-card/60 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-border disabled:opacity-60"
+                    >
+                      <div className="w-11 h-11 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center mb-4">
+                        <Sparkles className="h-5 w-5 text-cyan-500" />
+                      </div>
+                      <h3 className="text-base font-semibold text-foreground mb-1">
+                        {loadingQuiz ? tCommon("loading") : t("interviewPrep")}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">{t("interviewPrepNote")}</p>
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : analysis ? (
+              <div className="max-w-2xl mx-auto">
+                <Card className="backdrop-blur-sm overflow-hidden">
+                  <CardHeader className="border-b border-border">
+                    <CardTitle className="text-xl font-semibold">{t("analysisResults")}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 prose prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground">
+                    <AnalysisDisplay analysis={analysis} />
+                  </CardContent>
+                </Card>
+                <div className="flex flex-wrap justify-end gap-3 mt-6">
+                  <Button onClick={handleDownloadImprovedCv} disabled={downloadingCv} className="rounded-full px-8 py-6 h-auto text-lg font-medium">
+                    {downloadingCv ? tCommon("loading") : t("downloadImprovedCv")}
+                  </Button>
+                  <Button variant="outline" onClick={handleStartOver} className="rounded-full px-8 py-6 h-auto text-lg font-medium">
+                    {t("startOver")}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="max-w-2xl mx-auto flex flex-col items-center justify-center p-12">
+                <p className="text-muted-foreground">{t("noResults")}</p>
+              </div>
+            )}
+
+            {/* Job recommendations list (shown when jobs loaded) */}
+            {jobs.length > 0 && (
+              <Card className="backdrop-blur-sm overflow-hidden mt-6">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-xl font-semibold flex items-center gap-2">
+                    <Briefcase className="h-5 w-5" /> {t("recommendedJobs")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <ul className="space-y-4">
+                    {jobs.map((job, i) => (
+                      <li key={i} className="border border-border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <h4 className="font-semibold text-foreground">{job.title}</h4>
+                            <p className="text-sm text-muted-foreground">{job.company}</p>
+                            {job.location && <p className="text-xs text-muted-foreground mt-1">{job.location}</p>}
+                            {job.snippet && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{job.snippet}</p>}
+                          </div>
+                          <a href={job.link} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-full p-2 bg-primary text-primary-foreground hover:opacity-90" aria-label={tCommon("open")}>
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </CardContent>
               </Card>
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={handleStartOver}
-                  className="rounded-full px-8 py-6 h-auto text-lg font-medium"
-                >
-                  Start over
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+
+            {/* Interview quiz (shown when loaded) */}
+            {quizQuestions.length > 0 && (
+              <Card className="backdrop-blur-sm overflow-hidden mt-6">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-xl font-semibold">{t("interviewPrep")}</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">{t("interviewPrepNote")}</p>
+                </CardHeader>
+                <CardContent className="p-6 space-y-6">
+                  {quizQuestions.map((q, i) => (
+                    <div key={i} className="space-y-2">
+                      <p className="font-medium text-foreground">{i + 1}. {q.question}</p>
+                      <div className="space-y-2 pl-2">
+                        {(["A", "B", "C", "D"] as const).map((key) => (
+                          <label
+                            key={key}
+                            className={`flex items-start gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
+                              quizAnswers[i] === key ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50"
+                            } ${quizSubmitted ? (q.correct === key ? "ring-2 ring-green-500" : quizAnswers[i] === key && q.correct !== key ? "ring-2 ring-red-500" : "") : ""}`}
+                          >
+                            <input type="radio" name={`quiz-${i}`} checked={quizAnswers[i] === key} onChange={() => !quizSubmitted && setQuizAnswers((prev) => ({ ...prev, [i]: key }))} className="mt-1" />
+                            <span className="text-sm">{q.options[key]}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {quizSubmitted && <p className="text-sm text-muted-foreground mt-2 pl-2 border-l-2 border-muted">{q.explanation}</p>}
+                    </div>
+                  ))}
+                  {!quizSubmitted ? (
+                    <Button onClick={handleQuizSubmit} className="rounded-full">{t("submit")}</Button>
+                  ) : (
+                    <p className="font-medium text-foreground">Score: {quizScore} / {quizQuestions.length}</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-border pt-16 pb-8">
-        <div className="container mx-auto px-6 max-w-6xl">
-          <div className="flex flex-col items-center space-y-6">
-            <div className="flex items-center space-x-2 mb-6">
-              <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold tracking-tight text-foreground">CVSmart</span>
-            </div>
-            <div className="flex space-x-8">
-              {[
-                {
-                  name: "Twitter",
-                  href: "https://twitter.com",
-                  icon: <Twitter className="w-5 h-5 text-muted-foreground" />,
-                },
-                {
-                  name: "Facebook",
-                  href: "https://facebook.com",
-                  icon: <Facebook className="w-5 h-5 text-muted-foreground" />,
-                },
-                {
-                  name: "Instagram",
-                  href: "https://instagram.com",
-                  icon: <Instagram className="w-5 h-5 text-muted-foreground" />,
-                },
-                {
-                  name: "LinkedIn",
-                  href: "https://linkedin.com",
-                  icon: <Linkedin className="w-5 h-5 text-muted-foreground" />,
-                },
-              ].map((social) => (
-                <a
-                  key={social.name}
-                  href={social.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 rounded-full bg-muted flex items-center justify-center hover:bg-accent hover:text-accent-foreground transition-colors"
-                >
-                  <span className="sr-only">{social.name}</span>
-                  {social.icon}
-                </a>
-              ))}
-            </div>
-            <p className="text-muted-foreground text-sm">
-              © {new Date().getFullYear()} CVSmart. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
       <Analytics />
     </div>
   );
 }
+
 function AnalysisDisplay({ analysis }: { analysis: string }) {
   const fg = "var(--foreground)";
   const accent = "var(--success)";
-  const muted = "var(--muted-foreground)";
   const processedAnalysis = analysis
-    .replace(
-      /^# (.*$)/gm,
-      `<div class="text-2xl font-bold mb-4" style="color:${fg}">$1</div>`
-    )
-    .replace(
-      /^## (.*$)/gm,
-      `<div class="text-xl font-semibold mb-2" style="color:${fg}">$1</div>`
-    )
-    .replace(
-      /^### (.*$)/gm,
-      `<div class="text-lg font-medium mt-6 mb-3" style="color:${fg}">$1</div>`
-    )
-    .replace(
-      /^- (.*$)/gm,
-      `<div class="flex items-start mb-2"><div class="w-1.5 h-1.5 rounded-full mt-2 mr-2 flex-shrink-0" style="background:${accent}"></div><p style="color:${fg}">$1</p></div>`
-    )
-    .replace(
-      /^(\d+)\. (.*$)/gm,
-      `<div class="flex items-start mb-3"><div class="w-6 h-6 rounded-full flex items-center justify-center mr-3 flex-shrink-0" style="background:${accent};color:${fg}"><span class="text-xs font-medium">$1</span></div><p style="color:${fg}">$2</p></div>`
-    )
-    .replace(
-      /\*\*(.*?)\*\*/g,
-      `<span class="font-semibold" style="color:${accent}">$1</span>`
-    )
-    .replace(
-      /(✅|⚠️|❌|🌟|🔍|🛠️|📊|🔑|✏️|📁|🖋️|🎯)/g,
-      '<span class="text-xl mr-1">$1</span>'
-    );
-
+    .replace(/^# (.*$)/gm, `<div class="text-2xl font-bold mb-4" style="color:${fg}">$1</div>`)
+    .replace(/^## (.*$)/gm, `<div class="text-xl font-semibold mb-2" style="color:${fg}">$1</div>`)
+    .replace(/^### (.*$)/gm, `<div class="text-lg font-medium mt-6 mb-3" style="color:${fg}">$1</div>`)
+    .replace(/^- (.*$)/gm, `<div class="flex items-start mb-2"><div class="w-1.5 h-1.5 rounded-full mt-2 mr-2 flex-shrink-0" style="background:${accent}"></div><p style="color:${fg}">$1</p></div>`)
+    .replace(/^(\d+)\. (.*$)/gm, `<div class="flex items-start mb-3"><div class="w-6 h-6 rounded-full flex items-center justify-center mr-3 flex-shrink-0" style="background:${accent};color:${fg}"><span class="text-xs font-medium">$1</span></div><p style="color:${fg}">$2</p></div>`)
+    .replace(/\*\*(.*?)\*\*/g, `<span class="font-semibold" style="color:${accent}">$1</span>`)
+    .replace(/(✅|⚠️|❌|🌟|🔍|🛠️|📊|🔑|✏️|📁|🖋️|🎯)/g, '<span class="text-xl mr-1">$1</span>');
   const paragraphs = processedAnalysis.split("\n\n");
-
   return (
     <div className="analysis-container">
       {paragraphs.map((paragraph, index) => (
-        <div
-          key={index}
-          className="mb-4"
-          dangerouslySetInnerHTML={{
-            __html: paragraph.replace(/\n/g, "<br/>"),
-          }}
-        />
+        <div key={index} className="mb-4" dangerouslySetInnerHTML={{ __html: paragraph.replace(/\n/g, "<br/>") }} />
       ))}
     </div>
   );

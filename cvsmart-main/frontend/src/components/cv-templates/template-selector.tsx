@@ -20,6 +20,16 @@ const TEMPLATES: Template[] = [
 ];
 
 const sampleData: CVData = {
+  personal: {
+    fullName: "John Doe",
+    title: "Software Engineer",
+    email: "john@email.com",
+    phone: "+1 234 567 890",
+    location: "San Francisco, CA",
+    website: "",
+    linkedin: "",
+    github: "",
+  },
   summary: "Experienced professional with a strong background in engineering.",
   experience: [
     {

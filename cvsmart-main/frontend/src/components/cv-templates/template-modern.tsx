@@ -6,7 +6,12 @@ interface Props {
 }
 
 export function TemplateModern({ data }: Props) {
+  const { personal } = data;
+  const name = personal.fullName || "Your Name";
+  const hasContact = personal.email || personal.phone || personal.location || personal.website || personal.linkedin || personal.github;
+
   const hasContent =
+    personal.fullName ||
     data.summary ||
     data.experience.some((e) => e.role || e.company) ||
     data.education.some((e) => e.degree || e.school) ||
@@ -20,8 +25,26 @@ export function TemplateModern({ data }: Props) {
     >
       {/* Sidebar */}
       <div className="w-[280px] bg-[#F7E0C1] p-7 flex-shrink-0">
-        <h2 className="text-lg font-bold text-gray-900 mb-1">Your Name</h2>
-        <p className="text-xs text-gray-600 mb-5">Software Engineer</p>
+        <h2 className="text-lg font-bold text-gray-900 mb-0.5">{name}</h2>
+        {personal.title && (
+          <p className="text-xs text-gray-600 mb-4">{personal.title}</p>
+        )}
+
+        {hasContact && (
+          <div className="mb-5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-1 border-b border-gray-400/40 pb-1">
+              Contact
+            </h3>
+            <div className="space-y-1 text-[11px] text-gray-700 mt-1.5">
+              {personal.email && <p>{personal.email}</p>}
+              {personal.phone && <p>{personal.phone}</p>}
+              {personal.location && <p>{personal.location}</p>}
+              {personal.website && <p>{personal.website}</p>}
+              {personal.linkedin && <p>{personal.linkedin}</p>}
+              {personal.github && <p>{personal.github}</p>}
+            </div>
+          </div>
+        )}
 
         {data.summary && (
           <div className="mb-5">

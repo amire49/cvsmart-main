@@ -17,6 +17,12 @@ import {
   Download,
   RefreshCw,
   Search,
+  Zap,
+  Calendar,
+  Building2,
+  MessageCircle,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
@@ -57,6 +63,18 @@ interface QuizQuestion {
 }
 
 const MAX_FILE_SIZE_MB = 10;
+
+const SECTION_ICONS: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+  technical: Zap,
+  experience: Calendar,
+  projects: Building2,
+  softskills: MessageCircle,
+};
+
+function SectionIcon({ id, className, style }: { id: string; className?: string; style?: React.CSSProperties }) {
+  const Icon = SECTION_ICONS[id] ?? FileText;
+  return <Icon className={className} style={style} />;
+}
 
 /* ---------- Animated Score Ring ---------- */
 function AnimatedScore({
@@ -149,42 +167,56 @@ function StepProgressBar({
   currentStep,
   completedThrough,
   stepLabels,
+  loadingOnStep3,
+  step3ProgressPercent = 0,
 }: {
   currentStep: 1 | 2 | 3;
   completedThrough: number;
   stepLabels: [string, string, string];
+  loadingOnStep3?: boolean;
+  step3ProgressPercent?: number;
 }) {
-  const fillPercent = Math.min(100, (completedThrough / 2) * 100);
   const steps = [
     { id: 1 as const, label: stepLabels[0] },
     { id: 2 as const, label: stepLabels[1] },
     { id: 3 as const, label: stepLabels[2] },
   ];
+  const fillPercent =
+    loadingOnStep3
+      ? 50 + (step3ProgressPercent / 100) * 50
+      : Math.min(100, (completedThrough / 2) * 100);
   return (
     <nav aria-label={`Step ${currentStep} of 3`} className="relative z-10 w-full max-w-2xl mx-auto">
       <div className="absolute left-0 right-0 top-5 h-0.5 -translate-y-1/2 bg-muted" />
       <div
-        className="absolute left-0 top-5 h-0.5 -translate-y-1/2 bg-success transition-all duration-300"
+        className="absolute left-0 top-5 h-0.5 -translate-y-1/2 bg-success transition-all duration-500 ease-out"
         style={{ width: `${fillPercent}%` }}
       />
       <ol className="relative flex items-start justify-between" role="list">
         {steps.map((step) => {
           const isCompleted = completedThrough >= step.id;
           const isActive = currentStep === step.id;
+          const isStep3Loading = step.id === 3 && loadingOnStep3;
           return (
             <li key={step.id} className="flex flex-1 flex-col items-center" aria-current={isActive ? "step" : undefined}>
               <div
                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                  isCompleted
+                  isCompleted && !isStep3Loading
                     ? "border-transparent bg-success text-success-foreground"
-                    : isActive
+                    : isActive || isStep3Loading
                       ? "border-transparent bg-primary text-primary-foreground"
                       : "border-border bg-transparent text-muted-foreground"
                 }`}
               >
-                {isCompleted && !isActive ? <Check className="h-5 w-5" /> : <span className="text-sm font-semibold">{step.id}</span>}
+                {isCompleted && !isActive && !isStep3Loading ? (
+                  <Check className="h-5 w-5" />
+                ) : isStep3Loading ? (
+                  <div className="h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span className="text-sm font-semibold">{step.id}</span>
+                )}
               </div>
-              <span className={`mt-2 text-sm font-medium ${isActive ? "text-foreground" : "text-muted-foreground"}`}>{step.label}</span>
+              <span className={`mt-2 text-sm font-medium ${isActive || isStep3Loading ? "text-foreground" : "text-muted-foreground"}`}>{step.label}</span>
             </li>
           );
         })}
@@ -212,8 +244,11 @@ export default function ResumeAnalyzer() {
   const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "breakdown" | "actions">("overview");
   const [hoveredSection, setHoveredSection] = useState<string | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const completedThrough = currentStep === 3 ? 3 : currentStep === 2 ? 1 : 0;
+  const completedThrough =
+    currentStep === 3 ? (loading ? 2 : 3) : currentStep === 2 ? 1 : 0;
+  const loadingOnStep3 = currentStep === 3 && loading && !structured;
   const stepLabels: [string, string, string] = [t("stepUpload"), t("stepJobDesc"), t("stepResults")];
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -239,11 +274,29 @@ export default function ResumeAnalyzer() {
       toast.error(t("errorUploadAndJob"));
       return;
     }
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
     setLoading(true);
     setProgress(0);
+    setCurrentStep(3);
+    progressIntervalRef.current = setInterval(() => {
+      setProgress((p) => {
+        if (p >= 90) {
+          if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+            progressIntervalRef.current = null;
+          }
+          return 90;
+        }
+        return p + 4;
+      });
+    }, 180);
     const formData = new FormData();
     formData.append("resume", file);
     formData.append("jobDescription", jobDescription);
+    // Do not set Content-Type: fetch will set multipart/form-data with the correct boundary
     const headers: Record<string, string> = {};
     if (process.env.NEXT_PUBLIC_API_KEY) headers["X-API-KEY"] = process.env.NEXT_PUBLIC_API_KEY;
     try {
@@ -256,18 +309,27 @@ export default function ResumeAnalyzer() {
       setAnalysis((data as { analysis: string }).analysis || "");
       setStructured((data as { structured?: StructuredAnalysis }).structured || null);
       setActiveTab("overview");
-      setCurrentStep(3);
+      setProgress(100);
       toast.success(t("toastAnalysisComplete"));
     } catch (err) {
       console.error("Error during analysis:", err);
       toast.error("Cannot reach the server. Is the backend running at " + API_BASE + "?");
     } finally {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
       setLoading(false);
     }
   };
 
   const handleStartOver = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
     setCurrentStep(1);
+    setProgress(0);
     setAnalysis("");
     setStructured(null);
     setFile(null);
@@ -375,7 +437,13 @@ export default function ResumeAnalyzer() {
       </header>
 
       <div className="relative z-10 container mx-auto max-w-6xl px-4 pt-8">
-        <StepProgressBar currentStep={currentStep} completedThrough={completedThrough} stepLabels={stepLabels} />
+        <StepProgressBar
+          currentStep={currentStep}
+          completedThrough={completedThrough}
+          stepLabels={stepLabels}
+          loadingOnStep3={loadingOnStep3}
+          step3ProgressPercent={progress}
+        />
       </div>
 
       <main className="relative z-10 container mx-auto max-w-6xl p-6 md:p-8 pb-12">
@@ -412,8 +480,8 @@ export default function ResumeAnalyzer() {
               </CardContent>
             </Card>
             <div className="flex justify-end">
-              <Button onClick={() => setCurrentStep(2)} disabled={!file} className="rounded-full px-8 py-6 h-auto text-lg font-medium">
-                {t("next")} <ArrowRight className="ml-2 h-5 w-5" />
+              <Button onClick={() => setCurrentStep(2)} disabled={!file} className="rounded-full px-8 py-3 h-auto text-base font-medium inline-flex items-center gap-2">
+                {t("next")} <ArrowRight className="h-5 w-5 shrink-0" />
               </Button>
             </div>
           </div>
@@ -430,7 +498,7 @@ export default function ResumeAnalyzer() {
               <CardContent className="p-6">
                 <Textarea
                   placeholder={t("placeholderJobDesc")}
-                  className="min-h-[200px] bg-muted border-input text-foreground placeholder:text-muted-foreground resize-none"
+                  className="h-[240px] min-h-[240px] max-h-[240px] overflow-y-auto bg-muted border-input text-foreground placeholder:text-muted-foreground resize-none"
                   value={jobDescription}
                   onChange={(e) => setJobDescription(e.target.value)}
                 />
@@ -443,27 +511,49 @@ export default function ResumeAnalyzer() {
               </div>
             )}
             <div className="flex items-center justify-between gap-4">
-              <Button variant="outline" onClick={() => setCurrentStep(1)} disabled={loading} className="rounded-full px-6 py-6 h-auto">
-                <ArrowLeft className="mr-2 h-5 w-5" /> {t("back")}
+              <Button variant="outline" onClick={() => setCurrentStep(1)} disabled={loading} className="rounded-full px-6 py-3 h-auto font-medium inline-flex items-center gap-2">
+                <ArrowLeft className="h-5 w-5 shrink-0" /> {t("back")}
               </Button>
-              <Button onClick={handleAnalyze} disabled={loading || !file || !jobDescription.trim()} className="rounded-full px-8 py-6 h-auto text-lg font-medium">
+              <Button onClick={handleAnalyze} disabled={loading || !file || !jobDescription.trim()} className="rounded-full px-8 py-3 h-auto text-base font-medium inline-flex items-center gap-2">
                 {loading ? (
-                  <div className="flex items-center">
-                    <div className="animate-spin mr-2"><div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full" /></div>
+                  <>
+                    <div className="animate-spin shrink-0"><div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full" /></div>
                     {t("analyzing")}
-                  </div>
+                  </>
                 ) : (
-                  <>{t("analyzeButton")} <ArrowRight className="ml-2 h-5 w-5" /></>
+                  <>{t("analyzeButton")} <ArrowRight className="h-5 w-5 shrink-0" /></>
                 )}
               </Button>
             </div>
           </div>
         )}
 
-        {/* ---- Step 3: Results ---- */}
+        {/* ---- Step 3: Results or Loading ---- */}
         {currentStep === 3 && (
           <div className="space-y-6">
-            {s ? (
+            {loading && !s ? (
+              <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in duration-300">
+                <Card className="backdrop-blur-sm overflow-hidden">
+                  <CardHeader className="border-b border-border">
+                    <CardTitle className="text-xl font-semibold">{t("jobDescription")}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="h-[240px] min-h-[240px] max-h-[240px] overflow-y-auto bg-muted border border-input rounded-md px-3 py-2 text-sm text-foreground whitespace-pre-wrap">
+                      {jobDescription || t("placeholderJobDesc")}
+                    </div>
+                  </CardContent>
+                </Card>
+                <div className="space-y-4">
+                  <Progress value={progress} className="h-2 bg-muted" />
+                  <div className="flex justify-center">
+                    <Button disabled className="rounded-full px-8 py-3 h-auto text-base font-medium inline-flex items-center gap-2">
+                      <div className="animate-spin shrink-0"><div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full" /></div>
+                      {t("analyzing")}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : s ? (
               <>
                 {/* Hero row */}
                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -517,20 +607,20 @@ export default function ResumeAnalyzer() {
                           style={{ borderColor: hoveredSection === sec.id ? `${sec.color}60` : undefined }}
                         >
                           <div className="flex justify-between items-start mb-3">
-                            <span className="text-xl">{sec.icon}</span>
+                            <span className="text-foreground" style={{ color: sec.color }}>
+                              <SectionIcon id={sec.id} className="h-5 w-5" />
+                            </span>
                             <span className="font-mono text-xl font-bold" style={{ color: sec.color }}>{sec.score}</span>
                           </div>
                           <p className="text-xs text-muted-foreground font-medium mb-2">{sec.label}</p>
                           <MiniBar score={sec.score} color={sec.color} />
-                          {hoveredSection === sec.id && (
-                            <ul className="mt-3 space-y-1">
-                              {sec.details.map((d) => (
-                                <li key={d} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                                  <span style={{ color: sec.color }} className="text-[8px]">◆</span>{d}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
+                          <ul className="mt-3 space-y-1">
+                            {sec.details.map((d) => (
+                              <li key={d} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                                <span style={{ color: sec.color }} className="text-[8px]">◆</span>{d}
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       ))}
                     </div>
@@ -542,7 +632,7 @@ export default function ResumeAnalyzer() {
                         </h3>
                         {s.strengths.map((str, i) => (
                           <div key={i} className="flex gap-3 mb-3 items-start">
-                            <span className="text-success text-base shrink-0">↗</span>
+                            <TrendingUp className="h-4 w-4 shrink-0 text-success mt-0.5" />
                             <p className="text-sm text-muted-foreground leading-relaxed">{str}</p>
                           </div>
                         ))}
@@ -553,7 +643,7 @@ export default function ResumeAnalyzer() {
                         </h3>
                         {s.gaps.map((g, i) => (
                           <div key={i} className="flex gap-3 mb-3 items-start">
-                            <span className="text-destructive text-base shrink-0">↘</span>
+                            <TrendingDown className="h-4 w-4 shrink-0 text-destructive mt-0.5" />
                             <p className="text-sm text-muted-foreground leading-relaxed">{g}</p>
                           </div>
                         ))}
@@ -573,7 +663,7 @@ export default function ResumeAnalyzer() {
                     {s.sections.map((sec) => (
                       <div key={sec.id} className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-6">
                         <div className="flex items-center gap-4 mb-4">
-                          <span className="text-2xl">{sec.icon}</span>
+                          <span style={{ color: sec.color }}><SectionIcon id={sec.id} className="h-6 w-6" /></span>
                           <div className="flex-1">
                             <div className="flex justify-between mb-2">
                               <span className="font-semibold text-foreground">{sec.label}</span>
@@ -660,10 +750,10 @@ export default function ResumeAnalyzer() {
                   </CardContent>
                 </Card>
                 <div className="flex flex-wrap justify-end gap-3 mt-6">
-                  <Button onClick={handleDownloadImprovedCv} disabled={downloadingCv} className="rounded-full px-8 py-6 h-auto text-lg font-medium">
+                  <Button onClick={handleDownloadImprovedCv} disabled={downloadingCv} className="rounded-full px-8 py-3 h-auto text-base font-medium">
                     {downloadingCv ? tCommon("loading") : t("downloadImprovedCv")}
                   </Button>
-                  <Button variant="outline" onClick={handleStartOver} className="rounded-full px-8 py-6 h-auto text-lg font-medium">
+                  <Button variant="outline" onClick={handleStartOver} className="rounded-full px-8 py-3 h-auto text-base font-medium">
                     {t("startOver")}
                   </Button>
                 </div>
@@ -732,7 +822,7 @@ export default function ResumeAnalyzer() {
                     </div>
                   ))}
                   {!quizSubmitted ? (
-                    <Button onClick={handleQuizSubmit} className="rounded-full">{t("submit")}</Button>
+                    <Button onClick={handleQuizSubmit} className="rounded-full px-8 py-3 h-auto font-medium">{t("submit")}</Button>
                   ) : (
                     <p className="font-medium text-foreground">Score: {quizScore} / {quizQuestions.length}</p>
                   )}

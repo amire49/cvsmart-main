@@ -6,7 +6,12 @@ interface Props {
 }
 
 export function TemplateClassic({ data }: Props) {
+  const { personal } = data;
+  const name = personal.fullName || "Your Name";
+  const hasContact = personal.email || personal.phone || personal.location || personal.website || personal.linkedin || personal.github;
+
   const hasContent =
+    personal.fullName ||
     data.summary ||
     data.experience.some((e) => e.role || e.company) ||
     data.education.some((e) => e.degree || e.school) ||
@@ -20,11 +25,23 @@ export function TemplateClassic({ data }: Props) {
     >
       {/* Left profile column */}
       <div className="w-[40%] bg-white p-8 text-gray-800">
-        <h1 className="text-xl font-bold uppercase tracking-wide text-gray-900 mb-1">
-          {data.experience[0]?.company
-            ? data.experience[0].role || "Your Name"
-            : "Your Name"}
+        <h1 className="text-xl font-bold uppercase tracking-wide text-gray-900 mb-0.5">
+          {name}
         </h1>
+        {personal.title && (
+          <p className="text-[#66cc99] text-xs font-medium mb-3">{personal.title}</p>
+        )}
+
+        {hasContact && (
+          <div className="mt-3 space-y-1 text-xs text-gray-500">
+            {personal.email && <p>{personal.email}</p>}
+            {personal.phone && <p>{personal.phone}</p>}
+            {personal.location && <p>{personal.location}</p>}
+            {personal.website && <p>{personal.website}</p>}
+            {personal.linkedin && <p>{personal.linkedin}</p>}
+            {personal.github && <p>{personal.github}</p>}
+          </div>
+        )}
 
         {data.summary && (
           <div className="mt-4">

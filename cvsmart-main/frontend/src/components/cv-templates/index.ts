@@ -5,7 +5,7 @@ export { TemplateModern } from "./template-modern";
 export { TemplateMinimal } from "./template-minimal";
 export { TemplateSelector } from "./template-selector";
 export type { TemplateId } from "./template-selector";
-export type { CVData, ExperienceItem, EducationItem, ProjectItem } from "./types";
+export type { CVData, PersonalInfo, ExperienceItem, EducationItem, ProjectItem } from "./types";
 
 import type { CVData } from "./types";
 import type { TemplateId } from "./template-selector";

@@ -6,7 +6,12 @@ interface Props {
 }
 
 export function TemplateMinimal({ data }: Props) {
+  const { personal } = data;
+  const name = personal.fullName || "Your Name";
+  const contactParts = [personal.email, personal.phone, personal.location, personal.website].filter(Boolean);
+
   const hasContent =
+    personal.fullName ||
     data.summary ||
     data.experience.some((e) => e.role || e.company) ||
     data.education.some((e) => e.degree || e.school) ||
@@ -20,8 +25,20 @@ export function TemplateMinimal({ data }: Props) {
     >
       {/* Header */}
       <div className="bg-[#434E5E] text-white px-8 py-7">
-        <h1 className="text-xl font-bold tracking-wide">Your Name</h1>
-        <p className="text-gray-300 text-sm mt-1">Software Engineer</p>
+        <h1 className="text-xl font-bold tracking-wide">{name}</h1>
+        {personal.title && (
+          <p className="text-gray-300 text-sm mt-1">{personal.title}</p>
+        )}
+        {contactParts.length > 0 && (
+          <p className="text-gray-400 text-[11px] mt-2">
+            {contactParts.join("  •  ")}
+          </p>
+        )}
+        {(personal.linkedin || personal.github) && (
+          <p className="text-gray-400 text-[11px] mt-0.5">
+            {[personal.linkedin, personal.github].filter(Boolean).join("  •  ")}
+          </p>
+        )}
         {data.summary && (
           <p className="text-gray-300 text-xs mt-3 leading-relaxed whitespace-pre-wrap max-w-[600px]">
             {data.summary}

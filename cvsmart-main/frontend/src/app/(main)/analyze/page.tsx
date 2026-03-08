@@ -15,6 +15,7 @@ import {
   Briefcase,
   ExternalLink,
   Download,
+  FileDown,
   RefreshCw,
   Search,
   Zap,
@@ -238,6 +239,7 @@ export default function ResumeAnalyzer() {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [downloadingCv, setDownloadingCv] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, "A" | "B" | "C" | "D">>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
@@ -384,6 +386,34 @@ export default function ResumeAnalyzer() {
       URL.revokeObjectURL(url);
       toast.success("Download started");
     } catch { toast.error(t("errorTryAgain")); } finally { setDownloadingCv(false); }
+  };
+
+  const handleDownloadImprovedCvPdf = async () => {
+    if (!file || !jobDescription.trim()) return;
+    setDownloadingPdf(true);
+    const formData = new FormData();
+    formData.append("resume", file);
+    formData.append("jobDescription", jobDescription);
+    formData.append("format", "pdf");
+    if (analysis) formData.append("analysis", analysis);
+    const headers: Record<string, string> = {};
+    if (process.env.NEXT_PUBLIC_API_KEY) headers["X-API-KEY"] = process.env.NEXT_PUBLIC_API_KEY;
+    try {
+      const response = await fetch(`${API_BASE}/cv/improve`, { method: "POST", body: formData, headers });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        toast.error((data as { error?: string }).error || t("errorTryAgain"));
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "improved_cv.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF download started");
+    } catch { toast.error(t("errorTryAgain")); } finally { setDownloadingPdf(false); }
   };
 
   const handleStartAssessment = async () => {
@@ -701,6 +731,19 @@ export default function ResumeAnalyzer() {
                       <p className="text-sm text-muted-foreground">Get AI-improved CV as DOCX aligned to the job description</p>
                     </button>
                     <button
+                      onClick={handleDownloadImprovedCvPdf}
+                      disabled={downloadingPdf}
+                      className="rounded-2xl border border-success/30 bg-success/5 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-success/50 disabled:opacity-60"
+                    >
+                      <div className="w-11 h-11 rounded-xl bg-success/15 border border-success/30 flex items-center justify-center mb-4">
+                        <FileDown className="h-5 w-5 text-success" />
+                      </div>
+                      <h3 className="text-base font-semibold text-foreground mb-1">
+                        {downloadingPdf ? tCommon("loading") : "Download improved CV (PDF)"}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">Get AI-improved CV as PDF aligned to the job description</p>
+                    </button>
+                    <button
                       onClick={handleStartOver}
                       className="rounded-2xl border border-border bg-card/60 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-border"
                     >
@@ -752,6 +795,9 @@ export default function ResumeAnalyzer() {
                 <div className="flex flex-wrap justify-end gap-3 mt-6">
                   <Button onClick={handleDownloadImprovedCv} disabled={downloadingCv} className="rounded-full px-8 py-3 h-auto text-base font-medium">
                     {downloadingCv ? tCommon("loading") : t("downloadImprovedCv")}
+                  </Button>
+                  <Button onClick={handleDownloadImprovedCvPdf} disabled={downloadingPdf} className="rounded-full px-8 py-3 h-auto text-base font-medium">
+                    {downloadingPdf ? tCommon("loading") : "Download PDF"}
                   </Button>
                   <Button variant="outline" onClick={handleStartOver} className="rounded-full px-8 py-3 h-auto text-base font-medium">
                     {t("startOver")}

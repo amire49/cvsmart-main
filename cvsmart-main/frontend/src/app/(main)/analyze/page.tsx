@@ -28,6 +28,9 @@ import {
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { Analytics } from "@vercel/analytics/next";
+import { TemplateSelector, TEMPLATE_MAP } from "@/components/cv-templates";
+import type { CVData, TemplateId } from "@/components/cv-templates";
+import { generatePdfFromElement } from "@/lib/generate-pdf";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000";
 
@@ -61,6 +64,76 @@ interface QuizQuestion {
   options: { A: string; B: string; C: string; D: string };
   correct: "A" | "B" | "C" | "D";
   explanation: string;
+}
+
+interface CvExperienceItem {
+  role: string;
+  company: string;
+  location?: string;
+  dates?: string;
+  bullets?: string[];
+}
+
+interface CvEducationItem {
+  degree: string;
+  school: string;
+  year?: string;
+}
+
+interface CvProjectItem {
+  title: string;
+  description: string;
+}
+
+interface CvContact {
+  email?: string;
+  phone?: string;
+  location?: string;
+  website?: string;
+}
+
+interface StructuredCvSections {
+  name: string;
+  title: string;
+  contact: CvContact;
+  summary: string;
+  skills: string[];
+  experience: CvExperienceItem[];
+  education: CvEducationItem[];
+  projects?: CvProjectItem[];
+  hobbies?: string[];
+}
+
+function mapSectionsToCVData(s: StructuredCvSections): CVData {
+  return {
+    personal: {
+      fullName: s.name || "",
+      title: s.title || "",
+      email: s.contact?.email || "",
+      phone: s.contact?.phone || "",
+      location: s.contact?.location || "",
+      website: s.contact?.website || "",
+      linkedin: "",
+      github: "",
+    },
+    summary: s.summary || "",
+    experience: (s.experience || []).map((e) => ({
+      role: e.role || "",
+      company: e.company || "",
+      dates: e.dates || "",
+      bullets: e.bullets || [],
+    })),
+    education: (s.education || []).map((e) => ({
+      degree: e.degree || "",
+      school: e.school || "",
+      year: e.year || "",
+    })),
+    skills: s.skills || [],
+    projects: (s.projects || []).map((p) => ({
+      title: p.title || "",
+      description: p.description || "",
+    })),
+  };
 }
 
 const MAX_FILE_SIZE_MB = 10;
@@ -248,6 +321,12 @@ export default function ResumeAnalyzer() {
   const [hoveredSection, setHoveredSection] = useState<string | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [cvTemplatesOpen, setCvTemplatesOpen] = useState(false);
+  const [cvTemplatesLoading, setCvTemplatesLoading] = useState(false);
+  const [cvSections, setCvSections] = useState<StructuredCvSections | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<TemplateId | null>(null);
+  const pdfRenderRef = useRef<HTMLDivElement>(null);
+
   const completedThrough =
     currentStep === 3 ? (loading ? 2 : 3) : currentStep === 2 ? 1 : 0;
   const loadingOnStep3 = currentStep === 3 && loading && !structured;
@@ -341,6 +420,9 @@ export default function ResumeAnalyzer() {
     setQuizAnswers({});
     setQuizSubmitted(false);
     setActiveTab("overview");
+    setCvSections(null);
+    setCvTemplatesOpen(false);
+    setSelectedTemplateId(null);
   };
 
   const handleGetJobRecommendations = async () => {
@@ -390,30 +472,62 @@ export default function ResumeAnalyzer() {
 
   const handleDownloadImprovedCvPdf = async () => {
     if (!file || !jobDescription.trim()) return;
+    if (cvSections) {
+      setCvTemplatesOpen(true);
+      return;
+    }
     setDownloadingPdf(true);
+    setCvTemplatesLoading(true);
     const formData = new FormData();
     formData.append("resume", file);
     formData.append("jobDescription", jobDescription);
-    formData.append("format", "pdf");
     if (analysis) formData.append("analysis", analysis);
     const headers: Record<string, string> = {};
     if (process.env.NEXT_PUBLIC_API_KEY) headers["X-API-KEY"] = process.env.NEXT_PUBLIC_API_KEY;
     try {
-      const response = await fetch(`${API_BASE}/cv/improve`, { method: "POST", body: formData, headers });
+      const response = await fetch(`${API_BASE}/cv/templates`, { method: "POST", body: formData, headers });
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        toast.error((data as { error?: string }).error || t("errorTryAgain"));
+        const errorMessage = (data as { error?: string }).error;
+        if (errorMessage) {
+          toast.error(errorMessage);
+        } else {
+          toast.error(t("errorTryAgain"));
+        }
         return;
       }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "improved_cv.pdf";
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("PDF download started");
-    } catch { toast.error(t("errorTryAgain")); } finally { setDownloadingPdf(false); }
+      const sections = (data as { sections?: StructuredCvSections }).sections || null;
+      if (!sections) {
+        toast.error(t("errorTryAgain"));
+        return;
+      }
+      setCvSections(sections);
+      setSelectedTemplateId("classic");
+      setCvTemplatesOpen(true);
+    } catch {
+      toast.error(t("errorTryAgain"));
+    } finally {
+      setCvTemplatesLoading(false);
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handleConfirmTemplateDownload = async () => {
+    if (!cvSections || !selectedTemplateId) return;
+    setDownloadingPdf(true);
+    try {
+      await new Promise((r) => setTimeout(r, 300));
+      const el = pdfRenderRef.current;
+      if (!el) { toast.error("Render container not ready"); return; }
+      await generatePdfFromElement(el, "improved_cv.pdf");
+      toast.success("PDF downloaded!");
+      setCvTemplatesOpen(false);
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      toast.error("PDF generation failed. Check console for details.");
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   const handleStartAssessment = async () => {
@@ -878,6 +992,80 @@ export default function ResumeAnalyzer() {
           </div>
         )}
       </main>
+
+      {cvTemplatesOpen && cvSections && (() => {
+        const cvData = mapSectionsToCVData(cvSections);
+        const SelectedComponent = selectedTemplateId ? TEMPLATE_MAP[selectedTemplateId] : null;
+        return (
+          <>
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+              <div className="bg-card border border-border rounded-2xl shadow-xl max-w-3xl w-full mx-4 p-6 space-y-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Choose a resume template</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your content is ready. Pick a layout style for your PDF.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setCvTemplatesOpen(false)}
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                {cvTemplatesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <span>{tCommon("loading")}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <TemplateSelector
+                      selected={selectedTemplateId || "classic"}
+                      onSelect={(id) => setSelectedTemplateId(id)}
+                      data={cvData}
+                    />
+
+                    <div className="flex items-center justify-between pt-2">
+                      <p className="text-xs text-muted-foreground">
+                        Preview shows your actual resume data in each template.
+                      </p>
+                      <div className="flex gap-3">
+                        <Button
+                          variant="outline"
+                          onClick={() => setCvTemplatesOpen(false)}
+                          className="rounded-full px-5 py-2 h-auto text-sm"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleConfirmTemplateDownload}
+                          disabled={!selectedTemplateId || downloadingPdf}
+                          className="rounded-full px-6 py-2 h-auto text-sm"
+                        >
+                          {downloadingPdf ? tCommon("loading") : "Download PDF"}
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Off-screen container for PDF capture */}
+            <div
+              ref={pdfRenderRef}
+              style={{ position: "absolute", left: "-9999px", top: 0, width: 794, background: "#fff" }}
+            >
+              {SelectedComponent && <SelectedComponent data={cvData} />}
+            </div>
+          </>
+        );
+      })()}
 
       <Analytics />
     </div>

@@ -60,9 +60,12 @@ const templateComponents: Record<
 interface Props {
   selected: TemplateId;
   onSelect: (id: TemplateId) => void;
+  data?: CVData;
 }
 
-export function TemplateSelector({ selected, onSelect }: Props) {
+export function TemplateSelector({ selected, onSelect, data }: Props) {
+  const previewData = data || sampleData;
+
   return (
     <div className="grid grid-cols-3 gap-4">
       {TEMPLATES.map((tpl) => {
@@ -90,7 +93,7 @@ export function TemplateSelector({ selected, onSelect }: Props) {
                   height: "357%",
                 }}
               >
-                <Component data={sampleData} />
+                <Component data={previewData} />
               </div>
             </div>
 

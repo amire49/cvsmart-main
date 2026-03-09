@@ -222,7 +222,6 @@ def extract_text_from_docx(file_path):
 def extract_keywords_from_resume(resume_text, max_keywords=8):
     """Use Gemini to extract job-relevant keywords from resume text."""
     if not resume_text or len(resume_text.strip()) < 50:
-        # Fallback: take first 100 chars, split on non-alpha
         words = re.findall(r'[a-zA-Z]{3,}', resume_text[:500])
         return list(dict.fromkeys(words))[:max_keywords] if words else ["software", "developer"]
     try:
@@ -238,6 +237,217 @@ def extract_keywords_from_resume(resume_text, max_keywords=8):
     except Exception:
         words = re.findall(r'[a-zA-Z]{3,}', resume_text[:500])
         return list(dict.fromkeys(words))[:max_keywords] if words else ["software", "developer"]
+
+
+def _parse_resume_heuristic(resume_text, job_description=""):
+    """Best-effort parse of raw resume text into structured sections."""
+    lines = (resume_text or "").strip().splitlines()
+    name = ""
+    email = ""
+    phone = ""
+    location = ""
+
+    for line in lines[:15]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not name and len(stripped) < 60 and not re.search(r'[@\d]', stripped):
+            name = stripped
+            continue
+        em = re.search(r'[\w.+-]+@[\w.-]+\.\w+', stripped)
+        if em and not email:
+            email = em.group(0)
+        ph = re.search(r'\+?[\d\s\-().]{7,20}', stripped)
+        if ph and not phone:
+            phone = ph.group(0).strip()
+        if any(kw in stripped.lower() for kw in ['addis', 'ababa', 'nairobi', 'new york', 'london', 'remote', 'ethiopia']):
+            if not location:
+                location = stripped
+
+    section_map = {}
+    current_section = "other"
+    section_keywords = {
+        "summary": ["summary", "professional summary", "profile", "objective", "about"],
+        "experience": ["experience", "work experience", "employment", "work history"],
+        "education": ["education", "academic", "qualification"],
+        "skills": ["skills", "technical skills", "competencies", "technologies"],
+        "projects": ["projects", "portfolio", "key projects"],
+        "hobbies": ["hobbies", "interests", "activities"],
+    }
+
+    for line in lines:
+        stripped = line.strip()
+        low = stripped.lower().rstrip(':')
+        matched_section = None
+        for sec_key, keywords in section_keywords.items():
+            if low in keywords or any(low == kw for kw in keywords):
+                matched_section = sec_key
+                break
+        if matched_section:
+            current_section = matched_section
+            section_map.setdefault(current_section, [])
+            continue
+        if stripped:
+            section_map.setdefault(current_section, []).append(stripped)
+
+    skills_list = []
+    for s_line in section_map.get("skills", []):
+        for part in re.split(r'[,|;]', s_line):
+            part = part.strip().strip('-').strip()
+            if part and len(part) < 50:
+                skills_list.append(part)
+
+    experience_list = []
+    exp_lines = section_map.get("experience", [])
+    current_exp = None
+    for el in exp_lines:
+        if len(el) < 80 and not el.startswith('-') and not el.startswith('*'):
+            if current_exp:
+                experience_list.append(current_exp)
+            current_exp = {"role": el, "company": "", "location": "", "dates": "", "bullets": []}
+        elif current_exp:
+            current_exp["bullets"].append(el.lstrip('-').lstrip('*').strip())
+        else:
+            current_exp = {"role": "", "company": "", "location": "", "dates": "", "bullets": [el.lstrip('-').lstrip('*').strip()]}
+    if current_exp:
+        experience_list.append(current_exp)
+
+    education_list = []
+    for ed_line in section_map.get("education", []):
+        education_list.append({"degree": ed_line, "school": "", "year": ""})
+
+    summary_text = " ".join(section_map.get("summary", []))[:500]
+    if not summary_text:
+        jd_title = (job_description or "").splitlines()[0].strip()[:100] if job_description else ""
+        summary_text = f"Experienced professional applying for {jd_title}." if jd_title else ""
+
+    projects_list = []
+    for pl in section_map.get("projects", []):
+        projects_list.append({"title": pl, "description": ""})
+
+    hobbies = section_map.get("hobbies", [])
+
+    return {
+        "name": name,
+        "title": "",
+        "contact": {"email": email, "phone": phone, "location": location, "website": ""},
+        "summary": summary_text,
+        "skills": skills_list[:20],
+        "experience": experience_list,
+        "education": education_list,
+        "projects": projects_list,
+        "hobbies": hobbies,
+    }
+
+
+def generate_structured_cv_sections(resume_text, job_description, analysis_text=""):
+    """Use Gemini to turn resume + job description into structured JSON CV sections."""
+    prompt_parts = [
+        "Resume text:\n", resume_text[:6000] or "",
+        "\n\nJob description:\n", job_description[:4000] or "",
+    ]
+    if analysis_text:
+        prompt_parts.append("\n\nFeedback to incorporate:\n")
+        prompt_parts.append(analysis_text[:3000])
+    prompt_parts.append(
+        "\n\nReturn ONLY a valid JSON object with keys: name, title, contact, summary, "
+        "skills, experience, education, projects, hobbies. No markdown fences."
+    )
+    full_prompt = "".join(prompt_parts)
+
+    data = {}
+    try:
+        response = model_cv_json.generate_content(
+            full_prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=0.15,
+                max_output_tokens=4000,
+            ),
+        )
+        text = (response.text or "").strip()
+        if "```" in text:
+            parts = re.split(r"```(?:\w*)\s*\n?", text, maxsplit=1)
+            if len(parts) > 1:
+                text = parts[1]
+            text = re.sub(r"\s*```\s*$", "", text)
+        text = text.strip()
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            text = text[start : end + 1]
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            text_fixed = re.sub(r",\s*([}\]])", r"\1", text)
+            try:
+                data = json.loads(text_fixed)
+            except json.JSONDecodeError:
+                logging.warning("CV JSON parse failed; raw (first 400): %s", text[:400])
+                data = {}
+    except Exception as e:
+        logging.exception("generate_structured_cv_sections Gemini error: %s", e)
+
+    if not isinstance(data, dict) or not data or not data.get("name"):
+        logging.info("Gemini JSON unusable, falling back to heuristic parsing")
+        data = _parse_resume_heuristic(resume_text, job_description)
+
+    def _s(value, default=""):
+        return value if isinstance(value, str) else default
+
+    def _l(value):
+        return value if isinstance(value, list) else []
+
+    contact = data.get("contact") or {}
+    if not isinstance(contact, dict):
+        contact = {}
+
+    normalized = {
+        "name": _s(data.get("name")),
+        "title": _s(data.get("title")),
+        "contact": {
+            "email": _s(contact.get("email")),
+            "phone": _s(contact.get("phone")),
+            "location": _s(contact.get("location")),
+            "website": _s(contact.get("website")),
+        },
+        "summary": _s(data.get("summary")),
+        "skills": [str(s).strip() for s in _l(data.get("skills")) if str(s).strip()],
+        "experience": [],
+        "education": [],
+        "projects": [],
+        "hobbies": [str(h).strip() for h in _l(data.get("hobbies")) if str(h).strip()],
+    }
+
+    for exp in _l(data.get("experience")):
+        if not isinstance(exp, dict):
+            continue
+        normalized["experience"].append({
+            "role": _s(exp.get("role")),
+            "company": _s(exp.get("company")),
+            "location": _s(exp.get("location")),
+            "dates": _s(exp.get("dates")),
+            "bullets": [str(b).strip() for b in _l(exp.get("bullets")) if str(b).strip()],
+        })
+
+    for edu in _l(data.get("education")):
+        if not isinstance(edu, dict):
+            continue
+        normalized["education"].append({
+            "degree": _s(edu.get("degree")),
+            "school": _s(edu.get("school")),
+            "year": _s(edu.get("year")),
+        })
+
+    for proj in _l(data.get("projects")):
+        if not isinstance(proj, dict):
+            continue
+        normalized["projects"].append({
+            "title": _s(proj.get("title")),
+            "description": _s(proj.get("description")),
+        })
+
+    return normalized
+
 
 def fetch_jobs_from_adzuna(keywords, country="gb", per_page=10):
     """Fetch job listings from Adzuna API."""
@@ -386,6 +596,22 @@ model_improve = genai.GenerativeModel(
     system_instruction=IMPROVE_SYSTEM,
 )
 
+CV_JSON_SYSTEM = (
+    "You are an expert resume writer. You ONLY output valid JSON. "
+    "No markdown, no code fences, no explanation, no trailing commas. "
+    "Given a resume and job description, return a single JSON object with these exact keys: "
+    "name, title, contact (object with email/phone/location/website), summary, "
+    "skills (array of strings), experience (array of objects with role/company/location/dates/bullets), "
+    "education (array of objects with degree/school/year), "
+    "projects (array of objects with title/description), hobbies (array of strings). "
+    "Improve the content to match the job description. Do NOT invent facts."
+)
+
+model_cv_json = genai.GenerativeModel(
+    model_name='gemini-2.5-flash',
+    system_instruction=CV_JSON_SYSTEM,
+)
+
 def build_docx_from_text(text):
     """Build a simple DOCX from structured resume text (headers in ALL CAPS, then content)."""
     doc = DocxDocument()
@@ -487,6 +713,247 @@ def build_pdf_from_text(text):
     return buffer
 
 
+def _latin1(text_value):
+    """Safely encode text for FPDF's built-in Helvetica (latin-1 only)."""
+    if not text_value:
+        return ""
+    s = str(text_value)
+    return s.encode("latin-1", "replace").decode("latin-1")
+
+
+def build_cv_pdf_from_sections(sections, template_id="classic"):
+    """Build a professional CV PDF from structured sections dict."""
+    from fpdf import FPDF
+
+    class CVTemplatePDF(FPDF):
+        def __init__(self):
+            super().__init__()
+            self.set_auto_page_break(auto=True, margin=18)
+        def header(self):
+            pass
+        def footer(self):
+            self.set_y(-12)
+            self.set_font("Helvetica", "I", 7)
+            self.set_text_color(160, 160, 160)
+            w = self.w - self.l_margin - self.r_margin
+            if w > 0:
+                self.cell(w, 8, "Generated by CVSmart", align="C")
+
+    pdf = CVTemplatePDF()
+    pdf.set_margins(22, 18, 22)
+    pdf.add_page()
+    W = max(1, pdf.w - pdf.l_margin - pdf.r_margin)
+
+    name = _latin1(sections.get("name") or "")
+    title = _latin1(sections.get("title") or "")
+    contact = sections.get("contact") or {}
+    if not isinstance(contact, dict):
+        contact = {}
+    contact_parts = []
+    for k in ("email", "phone", "location", "website"):
+        v = _latin1(contact.get(k) or "").strip()
+        if v:
+            contact_parts.append(v)
+    contact_line = "  |  ".join(contact_parts)
+    summary = _latin1(sections.get("summary") or "")
+    skills = sections.get("skills") or []
+    experience = sections.get("experience") or []
+    education = sections.get("education") or []
+    projects = sections.get("projects") or []
+    hobbies = sections.get("hobbies") or []
+
+    # Colors per template
+    if template_id == "modern":
+        hdr_bg = (52, 58, 64)
+        hdr_fg = (255, 255, 255)
+        accent = (0, 123, 255)
+        body_fg = (33, 37, 41)
+        line_col = (0, 123, 255)
+    elif template_id == "minimal":
+        hdr_bg = None
+        hdr_fg = (0, 0, 0)
+        accent = (80, 80, 80)
+        body_fg = (50, 50, 50)
+        line_col = (200, 200, 200)
+    else:
+        hdr_bg = (245, 245, 245)
+        hdr_fg = (0, 0, 0)
+        accent = (30, 80, 160)
+        body_fg = (40, 40, 40)
+        line_col = (30, 80, 160)
+
+    def _hr():
+        pdf.set_draw_color(*line_col)
+        y = pdf.get_y()
+        pdf.line(pdf.l_margin, y, pdf.l_margin + W, y)
+        pdf.ln(3)
+
+    # ── NAME / TITLE / CONTACT ──
+    if template_id == "modern" and hdr_bg:
+        pdf.set_fill_color(*hdr_bg)
+        pdf.set_text_color(*hdr_fg)
+        pdf.set_font("Helvetica", "B", 22)
+        pdf.cell(W, 13, name or "Candidate", ln=1, fill=True)
+        if title:
+            pdf.set_font("Helvetica", "", 12)
+            pdf.cell(W, 8, title, ln=1, fill=True)
+        if contact_line:
+            pdf.set_font("Helvetica", "", 9)
+            pdf.cell(W, 7, contact_line, ln=1, fill=True)
+        pdf.ln(6)
+    elif template_id == "minimal":
+        pdf.set_text_color(*hdr_fg)
+        pdf.set_font("Helvetica", "B", 20)
+        pdf.cell(W, 11, name or "Candidate", ln=1)
+        if title:
+            pdf.set_font("Helvetica", "", 11)
+            pdf.set_text_color(*accent)
+            pdf.cell(W, 6, title, ln=1)
+        if contact_line:
+            pdf.set_font("Helvetica", "", 8)
+            pdf.set_text_color(120, 120, 120)
+            pdf.cell(W, 5, contact_line, ln=1)
+        pdf.ln(2)
+        _hr()
+    else:
+        if hdr_bg:
+            pdf.set_fill_color(*hdr_bg)
+        pdf.set_text_color(*hdr_fg)
+        pdf.set_font("Helvetica", "B", 20)
+        pdf.cell(W, 12, name or "Candidate", ln=1, fill=bool(hdr_bg))
+        if title:
+            pdf.set_font("Helvetica", "", 11)
+            pdf.set_text_color(*accent)
+            pdf.cell(W, 7, title, ln=1, fill=bool(hdr_bg))
+        if contact_line:
+            pdf.set_font("Helvetica", "", 8)
+            pdf.set_text_color(100, 100, 100)
+            pdf.cell(W, 6, contact_line, ln=1, fill=bool(hdr_bg))
+        pdf.ln(4)
+        _hr()
+
+    def section_heading(label):
+        pdf.ln(3)
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(*accent)
+        pdf.cell(W, 7, label.upper(), ln=1)
+        pdf.set_draw_color(*line_col)
+        pdf.line(pdf.l_margin, pdf.get_y(), pdf.l_margin + W, pdf.get_y())
+        pdf.ln(2)
+
+    def body_text(txt, bold=False):
+        pdf.set_font("Helvetica", "B" if bold else "", 10)
+        pdf.set_text_color(*body_fg)
+        pdf.multi_cell(W, 5, _latin1(txt))
+
+    def bullet(txt):
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(*body_fg)
+        pdf.cell(5, 5, "-")
+        x = pdf.get_x()
+        pdf.multi_cell(W - 5, 5, _latin1(txt))
+
+    # ── SUMMARY ──
+    if summary:
+        section_heading("Professional Summary")
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(*body_fg)
+        pdf.multi_cell(W, 5, summary)
+        pdf.ln(1)
+
+    # ── EXPERIENCE ──
+    if isinstance(experience, list) and experience:
+        section_heading("Experience")
+        for exp in experience:
+            if not isinstance(exp, dict):
+                continue
+            role = _latin1(exp.get("role") or "")
+            company = _latin1(exp.get("company") or "")
+            dates = _latin1(exp.get("dates") or "")
+            loc = _latin1(exp.get("location") or "")
+            line1 = role
+            if company:
+                line1 = f"{role}  -  {company}" if role else company
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(*body_fg)
+            pdf.cell(W * 0.7, 5, line1)
+            if dates:
+                pdf.set_font("Helvetica", "I", 9)
+                pdf.set_text_color(120, 120, 120)
+                pdf.cell(W * 0.3, 5, dates, align="R")
+            pdf.ln(5)
+            if loc:
+                pdf.set_font("Helvetica", "I", 8)
+                pdf.set_text_color(130, 130, 130)
+                pdf.cell(W, 4, loc, ln=1)
+            bullets = exp.get("bullets") or []
+            if isinstance(bullets, list):
+                for b in bullets:
+                    s = str(b or "").strip()
+                    if s:
+                        bullet(s)
+            pdf.ln(2)
+
+    # ── EDUCATION ──
+    if isinstance(education, list) and education:
+        section_heading("Education")
+        for edu in education:
+            if not isinstance(edu, dict):
+                continue
+            deg = _latin1(edu.get("degree") or "")
+            sch = _latin1(edu.get("school") or "")
+            yr = _latin1(edu.get("year") or "")
+            line1 = deg
+            if sch:
+                line1 = f"{deg}  -  {sch}" if deg else sch
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(*body_fg)
+            pdf.cell(W * 0.7, 5, line1)
+            if yr:
+                pdf.set_font("Helvetica", "I", 9)
+                pdf.set_text_color(120, 120, 120)
+                pdf.cell(W * 0.3, 5, yr, align="R")
+            pdf.ln(6)
+
+    # ── SKILLS ──
+    if isinstance(skills, list) and skills:
+        section_heading("Skills")
+        safe_skills = [_latin1(str(s).strip()) for s in skills if str(s).strip()]
+        chunks = [safe_skills[i:i+5] for i in range(0, len(safe_skills), 5)]
+        for chunk in chunks:
+            pdf.set_font("Helvetica", "", 9)
+            pdf.set_text_color(*body_fg)
+            pdf.multi_cell(W, 5, "  |  ".join(chunk))
+        pdf.ln(1)
+
+    # ── PROJECTS ──
+    if isinstance(projects, list) and projects:
+        section_heading("Projects")
+        for proj in projects:
+            if not isinstance(proj, dict):
+                continue
+            t = _latin1(proj.get("title") or "")
+            d = _latin1(proj.get("description") or "")
+            if t:
+                body_text(t, bold=True)
+            if d:
+                body_text(d)
+            pdf.ln(2)
+
+    # ── HOBBIES ──
+    if isinstance(hobbies, list) and hobbies:
+        section_heading("Interests")
+        safe_hobbies = [_latin1(str(h).strip()) for h in hobbies if str(h).strip()]
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(*body_fg)
+        pdf.multi_cell(W, 5, "  |  ".join(safe_hobbies))
+
+    buf = io.BytesIO()
+    buf.write(pdf.output())
+    buf.seek(0)
+    return buf
+
+
 @app.route('/cv/improve', methods=['POST'])
 @limiter.limit("10 per minute")
 def cv_improve():
@@ -549,6 +1016,49 @@ def cv_improve():
     except Exception as e:
         logging.exception("cv_improve error: %s", e)
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/cv/templates', methods=['POST'])
+@limiter.limit("10 per minute")
+def cv_templates():
+    """Return structured CV sections JSON generated by Gemini."""
+    if 'resume' not in request.files or not request.files['resume']:
+        return jsonify({'error': 'No resume file uploaded'}), 400
+    job_description = (request.form.get('jobDescription') or '').strip()
+    if not job_description or len(job_description) < 10:
+        return jsonify({'error': 'Job description required'}), 400
+    analysis_text = (request.form.get('analysis') or '').strip()
+
+    file = request.files['resume']
+    if not file.filename or not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file type'}), 400
+
+    filename = secure_filename(file.filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    try:
+        file.save(file_path)
+        if filename.endswith('.pdf'):
+            resume_text = extract_text_from_pdf(file_path)
+        else:
+            resume_text = extract_text_from_docx(file_path)
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    if not resume_text.strip():
+        return jsonify({'error': 'Could not extract text from resume'}), 400
+
+    try:
+        sections = generate_structured_cv_sections(resume_text, job_description, analysis_text)
+    except Exception as e:
+        msg = str(e)
+        logging.exception("cv/templates error: %s", e)
+        if "429" in msg or "ResourceExhausted" in msg:
+            return jsonify({'error': 'Gemini quota exceeded – please try again later.'}), 503
+        # Surface the underlying error to the client to make debugging easier.
+        return jsonify({'error': msg or 'Failed to generate CV structure'}), 500
+
+    return jsonify({'sections': sections})
 
 def build_cv_docx(sections):
     """Build DOCX from CV builder sections dict."""
@@ -652,6 +1162,33 @@ def cv_build():
         )
     except Exception as e:
         logging.exception("cv/build error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/cv/build/pdf', methods=['POST'])
+@limiter.limit("10 per minute")
+def cv_build_pdf():
+    """Build CV PDF from JSON (templateId + sections)."""
+    try:
+        data = request.get_json() or {}
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    template_id = str(data.get("templateId") or "classic").strip().lower()
+    sections = data.get("sections") or {}
+    if not isinstance(sections, dict):
+        return jsonify({"error": "sections must be an object"}), 400
+    if template_id not in {"classic", "modern", "minimal"}:
+        template_id = "classic"
+    try:
+        buffer = build_cv_pdf_from_sections(sections, template_id)
+        return send_file(
+            buffer,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name="improved_cv.pdf",
+        )
+    except Exception as e:
+        logging.exception("cv/build/pdf error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 ASSESS_PROMPT = """Based on the job description below, generate exactly 6 multiple-choice questions that candidates are likely to be asked in interviews for this role.

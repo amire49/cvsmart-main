@@ -20,51 +20,50 @@ export function TemplateClassic({ data }: Props) {
 
   return (
     <div
-      className="flex min-h-[700px] font-[Open_Sans]"
-      style={{ fontSize: 13 }}
+      style={{ fontSize: 13, fontFamily: "'Open Sans', sans-serif", display: "flex", minHeight: 700, backgroundColor: "#ffffff" }}
     >
       {/* Left profile column */}
-      <div className="w-[40%] bg-white p-8 text-gray-800">
-        <h1 className="text-xl font-bold uppercase tracking-wide text-gray-900 mb-0.5">
+      <div style={{ width: "40%", backgroundColor: "#ffffff", padding: 32, color: "#1f2937" }}>
+        <h1 style={{ fontSize: "1.25rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#111827", marginBottom: 2 }}>
           {name}
         </h1>
         {personal.title && (
-          <p className="text-[#66cc99] text-xs font-medium mb-3">{personal.title}</p>
+          <p style={{ color: "#66cc99", fontSize: "0.75rem", fontWeight: 500, marginBottom: 12 }}>{personal.title}</p>
         )}
 
         {hasContact && (
-          <div className="mt-3 space-y-1 text-xs text-gray-500">
-            {personal.email && <p>{personal.email}</p>}
-            {personal.phone && <p>{personal.phone}</p>}
-            {personal.location && <p>{personal.location}</p>}
-            {personal.website && <p>{personal.website}</p>}
-            {personal.linkedin && <p>{personal.linkedin}</p>}
-            {personal.github && <p>{personal.github}</p>}
+          <div style={{ marginTop: 12, color: "#6b7280", fontSize: "0.75rem" }}>
+            {personal.email && <p style={{ marginBottom: 4 }}>{personal.email}</p>}
+            {personal.phone && <p style={{ marginBottom: 4 }}>{personal.phone}</p>}
+            {personal.location && <p style={{ marginBottom: 4 }}>{personal.location}</p>}
+            {personal.website && <p style={{ marginBottom: 4 }}>{personal.website}</p>}
+            {personal.linkedin && <p style={{ marginBottom: 4 }}>{personal.linkedin}</p>}
+            {personal.github && <p style={{ marginBottom: 4 }}>{personal.github}</p>}
           </div>
         )}
 
         {data.summary && (
-          <div className="mt-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-1">
+          <div style={{ marginTop: 16 }}>
+            <h2 style={{ fontSize: "0.875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6b7280", marginBottom: 4 }}>
               Summary
             </h2>
-            <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">
+            <p style={{ color: "#4b5563", whiteSpace: "pre-wrap", lineHeight: 1.625 }}>
               {data.summary}
             </p>
           </div>
         )}
 
         {data.education.some((e) => e.degree || e.school) && (
-          <div className="mt-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-2">
+          <div style={{ marginTop: 20 }}>
+            <h2 style={{ fontSize: "0.875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6b7280", marginBottom: 8 }}>
               Education
             </h2>
             {data.education.map(
               (edu, i) =>
                 (edu.degree || edu.school) && (
-                  <div key={i} className="mb-2">
-                    <p className="font-semibold text-gray-800">{edu.degree}</p>
-                    <p className="text-gray-500 text-xs">
+                  <div key={i} style={{ marginBottom: 8 }}>
+                    <p style={{ fontWeight: 600, color: "#1f2937" }}>{edu.degree}</p>
+                    <p style={{ color: "#6b7280", fontSize: "0.75rem" }}>
                       {edu.school}
                       {edu.year && ` — ${edu.year}`}
                     </p>
@@ -75,13 +74,13 @@ export function TemplateClassic({ data }: Props) {
         )}
 
         {data.skills.length > 0 && (
-          <div className="mt-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-2">
+          <div style={{ marginTop: 20 }}>
+            <h2 style={{ fontSize: "0.875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6b7280", marginBottom: 8 }}>
               Skills
             </h2>
-            <ul className="space-y-1">
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
               {data.skills.map((skill, i) => (
-                <li key={i} className="text-gray-600">
+                <li key={i} style={{ color: "#4b5563", marginBottom: 4 }}>
                   {skill}
                 </li>
               ))}
@@ -91,25 +90,25 @@ export function TemplateClassic({ data }: Props) {
       </div>
 
       {/* Right experience column */}
-      <div className="w-[60%] bg-[#3d3e42] text-[#9099a0] p-8">
+      <div style={{ width: "60%", backgroundColor: "#3d3e42", color: "#9099a0", padding: 32 }}>
         {data.experience.some((e) => e.role || e.company) && (
           <div>
-            <h2 className="text-white text-sm font-semibold uppercase tracking-wider mb-3">
+            <h2 style={{ color: "#ffffff", fontSize: "0.875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
               Experience
             </h2>
             {data.experience.map(
               (exp, i) =>
                 (exp.role || exp.company) && (
-                  <div key={i} className="mb-4">
-                    <p className="text-white font-semibold">{exp.role}</p>
-                    <p className="text-[#66cc99] text-xs mb-1">
+                  <div key={i} style={{ marginBottom: 16 }}>
+                    <p style={{ color: "#ffffff", fontWeight: 600 }}>{exp.role}</p>
+                    <p style={{ color: "#66cc99", fontSize: "0.75rem", marginBottom: 4 }}>
                       {exp.company}
                       {exp.dates && ` | ${exp.dates}`}
                     </p>
                     {exp.bullets.length > 0 && (
-                      <ul className="list-disc list-inside space-y-0.5 text-xs">
+                      <ul style={{ listStyleType: "disc", listStylePosition: "inside", fontSize: "0.75rem", margin: 0, padding: 0 }}>
                         {exp.bullets.map((b, j) => (
-                          <li key={j}>{b}</li>
+                          <li key={j} style={{ marginBottom: 2 }}>{b}</li>
                         ))}
                       </ul>
                     )}
@@ -120,17 +119,17 @@ export function TemplateClassic({ data }: Props) {
         )}
 
         {data.projects.some((p) => p.title || p.description) && (
-          <div className="mt-5">
-            <h2 className="text-white text-sm font-semibold uppercase tracking-wider mb-3">
+          <div style={{ marginTop: 20 }}>
+            <h2 style={{ color: "#ffffff", fontSize: "0.875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
               Projects
             </h2>
             {data.projects.map(
               (proj, i) =>
                 (proj.title || proj.description) && (
-                  <div key={i} className="mb-3">
-                    <p className="text-white font-semibold">{proj.title}</p>
+                  <div key={i} style={{ marginBottom: 12 }}>
+                    <p style={{ color: "#ffffff", fontWeight: 600 }}>{proj.title}</p>
                     {proj.description && (
-                      <p className="text-xs mt-0.5">{proj.description}</p>
+                      <p style={{ fontSize: "0.75rem", marginTop: 2 }}>{proj.description}</p>
                     )}
                   </div>
                 )
@@ -139,7 +138,7 @@ export function TemplateClassic({ data }: Props) {
         )}
 
         {!hasContent && (
-          <p className="italic text-[#9099a0]">
+          <p style={{ fontStyle: "italic", color: "#9099a0" }}>
             Fill in the form to see your CV here.
           </p>
         )}

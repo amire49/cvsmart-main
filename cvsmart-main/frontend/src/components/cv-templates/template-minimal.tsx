@@ -20,62 +20,61 @@ export function TemplateMinimal({ data }: Props) {
 
   return (
     <div
-      className="min-h-[700px] bg-white font-[Open_Sans]"
-      style={{ fontSize: 13 }}
+      style={{ fontSize: 13, fontFamily: "'Open Sans', sans-serif", minHeight: 700, backgroundColor: "#ffffff" }}
     >
       {/* Header */}
-      <div className="bg-[#434E5E] text-white px-8 py-7">
-        <h1 className="text-xl font-bold tracking-wide">{name}</h1>
+      <div style={{ backgroundColor: "#434E5E", color: "#ffffff", padding: "28px 32px" }}>
+        <h1 style={{ fontSize: "1.25rem", fontWeight: 700, letterSpacing: "0.05em" }}>{name}</h1>
         {personal.title && (
-          <p className="text-gray-300 text-sm mt-1">{personal.title}</p>
+          <p style={{ color: "#d1d5db", fontSize: "0.875rem", marginTop: 4 }}>{personal.title}</p>
         )}
         {contactParts.length > 0 && (
-          <p className="text-gray-400 text-[11px] mt-2">
-            {contactParts.join("  •  ")}
+          <p style={{ color: "#9ca3af", fontSize: "0.6875rem", marginTop: 8 }}>
+            {contactParts.join("  \u2022  ")}
           </p>
         )}
         {(personal.linkedin || personal.github) && (
-          <p className="text-gray-400 text-[11px] mt-0.5">
-            {[personal.linkedin, personal.github].filter(Boolean).join("  •  ")}
+          <p style={{ color: "#9ca3af", fontSize: "0.6875rem", marginTop: 2 }}>
+            {[personal.linkedin, personal.github].filter(Boolean).join("  \u2022  ")}
           </p>
         )}
         {data.summary && (
-          <p className="text-gray-300 text-xs mt-3 leading-relaxed whitespace-pre-wrap max-w-[600px]">
+          <p style={{ color: "#d1d5db", fontSize: "0.75rem", marginTop: 12, lineHeight: 1.625, whiteSpace: "pre-wrap", maxWidth: 600 }}>
             {data.summary}
           </p>
         )}
       </div>
 
       {/* Body: 75/25 grid */}
-      <div className="flex">
+      <div style={{ display: "flex" }}>
         {/* Main column (75%) */}
-        <div className="w-[75%] p-6">
+        <div style={{ width: "75%", padding: 24 }}>
           {data.experience.some((e) => e.role || e.company) && (
-            <div className="mb-5">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#434E5E] mb-3 border-b-2 border-[#434E5E] pb-1">
+            <div style={{ marginBottom: 20 }}>
+              <h2 style={{ fontSize: "0.875rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#434E5E", marginBottom: 12, borderBottom: "2px solid #434E5E", paddingBottom: 4 }}>
                 Experience
               </h2>
               {data.experience.map(
                 (exp, i) =>
                   (exp.role || exp.company) && (
-                    <div key={i} className="mb-4">
-                      <div className="flex justify-between items-baseline">
-                        <p className="font-semibold text-gray-900">
+                    <div key={i} style={{ marginBottom: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                        <p style={{ fontWeight: 600, color: "#111827" }}>
                           {exp.role}
                         </p>
                         {exp.dates && (
-                          <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">
+                          <span style={{ fontSize: "0.6875rem", color: "#9ca3af", flexShrink: 0, marginLeft: 8 }}>
                             {exp.dates}
                           </span>
                         )}
                       </div>
-                      <p className="text-[#58677c] text-xs mb-1">
+                      <p style={{ color: "#58677c", fontSize: "0.75rem", marginBottom: 4 }}>
                         {exp.company}
                       </p>
                       {exp.bullets.length > 0 && (
-                        <ul className="list-disc list-inside space-y-0.5 text-gray-600 text-xs">
+                        <ul style={{ listStyleType: "disc", listStylePosition: "inside", color: "#4b5563", fontSize: "0.75rem", margin: 0, padding: 0 }}>
                           {exp.bullets.map((b, j) => (
-                            <li key={j}>{b}</li>
+                            <li key={j} style={{ marginBottom: 2 }}>{b}</li>
                           ))}
                         </ul>
                       )}
@@ -87,18 +86,18 @@ export function TemplateMinimal({ data }: Props) {
 
           {data.projects.some((p) => p.title || p.description) && (
             <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#434E5E] mb-3 border-b-2 border-[#434E5E] pb-1">
+              <h2 style={{ fontSize: "0.875rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#434E5E", marginBottom: 12, borderBottom: "2px solid #434E5E", paddingBottom: 4 }}>
                 Projects
               </h2>
               {data.projects.map(
                 (proj, i) =>
                   (proj.title || proj.description) && (
-                    <div key={i} className="mb-3">
-                      <p className="font-semibold text-gray-900">
+                    <div key={i} style={{ marginBottom: 12 }}>
+                      <p style={{ fontWeight: 600, color: "#111827" }}>
                         {proj.title}
                       </p>
                       {proj.description && (
-                        <p className="text-gray-600 text-xs mt-0.5">
+                        <p style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
                           {proj.description}
                         </p>
                       )}
@@ -109,27 +108,27 @@ export function TemplateMinimal({ data }: Props) {
           )}
 
           {!hasContent && (
-            <p className="italic text-gray-400">
+            <p style={{ fontStyle: "italic", color: "#9ca3af" }}>
               Fill in the form to see your CV here.
             </p>
           )}
         </div>
 
         {/* Side column (25%) */}
-        <div className="w-[25%] p-6 bg-gray-50">
+        <div style={{ width: "25%", padding: 24, backgroundColor: "#f9fafb" }}>
           {data.education.some((e) => e.degree || e.school) && (
-            <div className="mb-5">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-[#434E5E] mb-2 border-b border-gray-300 pb-1">
+            <div style={{ marginBottom: 20 }}>
+              <h2 style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#434E5E", marginBottom: 8, borderBottom: "1px solid #d1d5db", paddingBottom: 4 }}>
                 Education
               </h2>
               {data.education.map(
                 (edu, i) =>
                   (edu.degree || edu.school) && (
-                    <div key={i} className="mb-2">
-                      <p className="font-semibold text-gray-800 text-xs">
+                    <div key={i} style={{ marginBottom: 8 }}>
+                      <p style={{ fontWeight: 600, color: "#1f2937", fontSize: "0.75rem" }}>
                         {edu.degree}
                       </p>
-                      <p className="text-gray-500 text-[11px]">
+                      <p style={{ color: "#6b7280", fontSize: "0.6875rem" }}>
                         {edu.school}
                         {edu.year && ` — ${edu.year}`}
                       </p>
@@ -141,17 +140,16 @@ export function TemplateMinimal({ data }: Props) {
 
           {data.skills.length > 0 && (
             <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-[#434E5E] mb-2 border-b border-gray-300 pb-1">
+              <h2 style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#434E5E", marginBottom: 8, borderBottom: "1px solid #d1d5db", paddingBottom: 4 }}>
                 Skills
               </h2>
-              <div className="space-y-2">
+              <div>
                 {data.skills.map((skill, i) => (
-                  <div key={i}>
-                    <p className="text-gray-700 text-xs mb-0.5">{skill}</p>
-                    <div className="h-1.5 bg-gray-200 rounded-full">
+                  <div key={i} style={{ marginBottom: 8 }}>
+                    <p style={{ color: "#374151", fontSize: "0.75rem", marginBottom: 2 }}>{skill}</p>
+                    <div style={{ height: 6, backgroundColor: "#e5e7eb", borderRadius: 9999 }}>
                       <div
-                        className="h-1.5 bg-[#58677c] rounded-full"
-                        style={{ width: `${75 + ((i * 13) % 25)}%` }}
+                        style={{ height: 6, backgroundColor: "#58677c", borderRadius: 9999, width: `${75 + ((i * 13) % 25)}%` }}
                       />
                     </div>
                   </div>

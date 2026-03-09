@@ -20,56 +20,55 @@ export function TemplateModern({ data }: Props) {
 
   return (
     <div
-      className="flex min-h-[700px] bg-white shadow-xl font-[Open_Sans]"
-      style={{ fontSize: 13 }}
+      style={{ fontSize: 13, fontFamily: "'Open Sans', sans-serif", display: "flex", minHeight: 700, backgroundColor: "#ffffff", boxShadow: "0 20px 25px -5px rgba(0,0,0,.1)" }}
     >
       {/* Sidebar */}
-      <div className="w-[280px] bg-[#F7E0C1] p-7 flex-shrink-0">
-        <h2 className="text-lg font-bold text-gray-900 mb-0.5">{name}</h2>
+      <div style={{ width: 280, backgroundColor: "#F7E0C1", padding: 28, flexShrink: 0 }}>
+        <h2 style={{ fontSize: "1.125rem", fontWeight: 700, color: "#111827", marginBottom: 2 }}>{name}</h2>
         {personal.title && (
-          <p className="text-xs text-gray-600 mb-4">{personal.title}</p>
+          <p style={{ fontSize: "0.75rem", color: "#4b5563", marginBottom: 16 }}>{personal.title}</p>
         )}
 
         {hasContact && (
-          <div className="mb-5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-1 border-b border-gray-400/40 pb-1">
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#374151", marginBottom: 4, borderBottom: "1px solid rgba(156,163,175,0.4)", paddingBottom: 4 }}>
               Contact
             </h3>
-            <div className="space-y-1 text-[11px] text-gray-700 mt-1.5">
-              {personal.email && <p>{personal.email}</p>}
-              {personal.phone && <p>{personal.phone}</p>}
-              {personal.location && <p>{personal.location}</p>}
-              {personal.website && <p>{personal.website}</p>}
-              {personal.linkedin && <p>{personal.linkedin}</p>}
-              {personal.github && <p>{personal.github}</p>}
+            <div style={{ fontSize: "0.6875rem", color: "#374151", marginTop: 6 }}>
+              {personal.email && <p style={{ marginBottom: 4 }}>{personal.email}</p>}
+              {personal.phone && <p style={{ marginBottom: 4 }}>{personal.phone}</p>}
+              {personal.location && <p style={{ marginBottom: 4 }}>{personal.location}</p>}
+              {personal.website && <p style={{ marginBottom: 4 }}>{personal.website}</p>}
+              {personal.linkedin && <p style={{ marginBottom: 4 }}>{personal.linkedin}</p>}
+              {personal.github && <p style={{ marginBottom: 4 }}>{personal.github}</p>}
             </div>
           </div>
         )}
 
         {data.summary && (
-          <div className="mb-5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-1 border-b border-gray-400/40 pb-1">
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#374151", marginBottom: 4, borderBottom: "1px solid rgba(156,163,175,0.4)", paddingBottom: 4 }}>
               About Me
             </h3>
-            <p className="text-gray-700 whitespace-pre-wrap leading-relaxed text-xs">
+            <p style={{ color: "#374151", whiteSpace: "pre-wrap", lineHeight: 1.625, fontSize: "0.75rem" }}>
               {data.summary}
             </p>
           </div>
         )}
 
         {data.education.some((e) => e.degree || e.school) && (
-          <div className="mb-5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-1 border-b border-gray-400/40 pb-1">
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#374151", marginBottom: 4, borderBottom: "1px solid rgba(156,163,175,0.4)", paddingBottom: 4 }}>
               Education
             </h3>
             {data.education.map(
               (edu, i) =>
                 (edu.degree || edu.school) && (
-                  <div key={i} className="mb-2">
-                    <p className="font-semibold text-gray-800 text-xs">
+                  <div key={i} style={{ marginBottom: 8 }}>
+                    <p style={{ fontWeight: 600, color: "#1f2937", fontSize: "0.75rem" }}>
                       {edu.degree}
                     </p>
-                    <p className="text-gray-600 text-[11px]">
+                    <p style={{ color: "#4b5563", fontSize: "0.6875rem" }}>
                       {edu.school}
                       {edu.year && ` — ${edu.year}`}
                     </p>
@@ -80,15 +79,15 @@ export function TemplateModern({ data }: Props) {
         )}
 
         {data.skills.length > 0 && (
-          <div className="mb-5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-1 border-b border-gray-400/40 pb-1">
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#374151", marginBottom: 4, borderBottom: "1px solid rgba(156,163,175,0.4)", paddingBottom: 4 }}>
               Skills
             </h3>
-            <div className="flex flex-wrap gap-1.5 mt-2">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {data.skills.map((skill, i) => (
                 <span
                   key={i}
-                  className="bg-white/60 text-gray-800 px-2 py-0.5 rounded text-[11px]"
+                  style={{ backgroundColor: "rgba(255,255,255,0.6)", color: "#1f2937", padding: "2px 8px", borderRadius: 4, fontSize: "0.6875rem" }}
                 >
                   {skill}
                 </span>
@@ -99,29 +98,29 @@ export function TemplateModern({ data }: Props) {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 p-8">
+      <div style={{ flex: 1, padding: 32 }}>
         {data.experience.some((e) => e.role || e.company) && (
-          <div className="mb-5">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-800 mb-3 border-b-2 border-[#F7E0C1] pb-1">
+          <div style={{ marginBottom: 20 }}>
+            <h2 style={{ fontSize: "0.875rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#1f2937", marginBottom: 12, borderBottom: "2px solid #F7E0C1", paddingBottom: 4 }}>
               Experience
             </h2>
             {data.experience.map(
               (exp, i) =>
                 (exp.role || exp.company) && (
-                  <div key={i} className="mb-4">
-                    <div className="flex justify-between items-baseline">
-                      <p className="font-semibold text-gray-900">{exp.role}</p>
+                  <div key={i} style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                      <p style={{ fontWeight: 600, color: "#111827" }}>{exp.role}</p>
                       {exp.dates && (
-                        <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">
+                        <span style={{ fontSize: "0.6875rem", color: "#9ca3af", flexShrink: 0, marginLeft: 8 }}>
                           {exp.dates}
                         </span>
                       )}
                     </div>
-                    <p className="text-[#c0884d] text-xs mb-1">{exp.company}</p>
+                    <p style={{ color: "#c0884d", fontSize: "0.75rem", marginBottom: 4 }}>{exp.company}</p>
                     {exp.bullets.length > 0 && (
-                      <ul className="list-disc list-inside space-y-0.5 text-gray-600 text-xs">
+                      <ul style={{ listStyleType: "disc", listStylePosition: "inside", color: "#4b5563", fontSize: "0.75rem", margin: 0, padding: 0 }}>
                         {exp.bullets.map((b, j) => (
-                          <li key={j}>{b}</li>
+                          <li key={j} style={{ marginBottom: 2 }}>{b}</li>
                         ))}
                       </ul>
                     )}
@@ -133,16 +132,16 @@ export function TemplateModern({ data }: Props) {
 
         {data.projects.some((p) => p.title || p.description) && (
           <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-800 mb-3 border-b-2 border-[#F7E0C1] pb-1">
+            <h2 style={{ fontSize: "0.875rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#1f2937", marginBottom: 12, borderBottom: "2px solid #F7E0C1", paddingBottom: 4 }}>
               Projects
             </h2>
             {data.projects.map(
               (proj, i) =>
                 (proj.title || proj.description) && (
-                  <div key={i} className="mb-3">
-                    <p className="font-semibold text-gray-900">{proj.title}</p>
+                  <div key={i} style={{ marginBottom: 12 }}>
+                    <p style={{ fontWeight: 600, color: "#111827" }}>{proj.title}</p>
                     {proj.description && (
-                      <p className="text-gray-600 text-xs mt-0.5">
+                      <p style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
                         {proj.description}
                       </p>
                     )}
@@ -153,7 +152,7 @@ export function TemplateModern({ data }: Props) {
         )}
 
         {!hasContent && (
-          <p className="italic text-gray-400">
+          <p style={{ fontStyle: "italic", color: "#9ca3af" }}>
             Fill in the form to see your CV here.
           </p>
         )}

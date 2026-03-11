@@ -77,6 +77,97 @@ function SectionIcon({ id, className, style }: { id: string; className?: string;
   return <Icon className={className} style={style} />;
 }
 
+/** When backend returns raw JSON as analysis (e.g. parsing failed), parse it into StructuredAnalysis for the UI */
+function parseStructuredFromAnalysis(analysis: string): StructuredAnalysis | null {
+  const raw = analysis.trim();
+  if (!raw || (raw[0] !== "{" && raw[0] !== "[")) return null;
+  let data: Record<string, unknown>;
+  try {
+    const fixed = raw.replace(/,\s*([}\]])/g, "$1");
+    data = JSON.parse(fixed) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+
+  const num = (v: unknown, d: number) => {
+    if (typeof v === "number" && !Number.isNaN(v)) return Math.max(0, Math.min(100, Math.round(v)));
+    if (typeof v === "string") return Math.max(0, Math.min(100, Math.round(parseFloat(v)) || d));
+    return d;
+  };
+  const arr = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean).slice(0, 6);
+    return [];
+  };
+  const str = (v: unknown, d: string) => (v != null && String(v).trim() ? String(v).trim() : d);
+
+  const overall = num(data.ResumeMatchScore ?? data.overallScore ?? data.OverallScore, 50);
+  const expScore = num(data.ExperienceScore ?? data.experienceScore, overall);
+  const projScore = num(data.ProjectScore ?? data.projectScore, overall);
+  const techScore = num(data.TechnicalScore ?? data.technicalScore, overall);
+  const commScore = num(data.CommunicationScore ?? data.communicationScore, overall);
+
+  let verdict = "Conditional Match";
+  let verdictColor = "#f4a261";
+  if (overall >= 75) {
+    verdict = "Strong Match";
+    verdictColor = "#00e5a0";
+  } else if (overall < 50) {
+    verdict = "Weak Match";
+    verdictColor = "#ff4d6d";
+  }
+
+  const strengths = arr(data.ImportantSkills ?? data.strengths ?? data.Strengths);
+  const gaps = arr(data.MissingSkills ?? data.gaps ?? data.Gaps);
+  const recommendation = str(
+    data.Recommendation ?? data.recommendation,
+    `Overall match: ${overall}%. Review strengths and gaps below.`
+  );
+
+  return {
+    overallScore: overall,
+    verdict,
+    verdictColor,
+    sections: [
+      {
+        id: "technical",
+        label: "Technical Alignment",
+        score: techScore,
+        color: "#00e5a0",
+        icon: "⚡",
+        details: strengths.length ? strengths.slice(0, 4) : ["See full analysis"],
+      },
+      {
+        id: "experience",
+        label: "Experience Match",
+        score: expScore,
+        color: "#ff4d6d",
+        icon: "📅",
+        details: arr(data.ExperienceDetails ?? data.experienceDetails).slice(0, 4) || ["See full analysis"],
+      },
+      {
+        id: "projects",
+        label: "Project Relevance",
+        score: projScore,
+        color: "#00b4d8",
+        icon: "🏗️",
+        details: arr(data.ProjectDetails ?? data.projectDetails).slice(0, 4) || ["See full analysis"],
+      },
+      {
+        id: "softskills",
+        label: "Communication & Fit",
+        score: commScore,
+        color: "#f4a261",
+        icon: "💬",
+        details: arr(data.CommunicationDetails ?? data.communicationDetails).slice(0, 4) || ["See full analysis"],
+      },
+    ],
+    strengths: strengths.length ? strengths : ["See full analysis for strengths"],
+    gaps: gaps.length ? gaps : ["See full analysis for gaps"],
+    recommendation: recommendation.slice(0, 500),
+  };
+}
+
 /* ---------- Animated Score Ring ---------- */
 function AnimatedScore({
   target,
@@ -307,7 +398,17 @@ export default function ResumeAnalyzer() {
         return;
       }
       setAnalysis((data as { analysis: string }).analysis || "");
-      setStructured((data as { structured?: StructuredAnalysis }).structured || null);
+      const rawStructured = (data as { structured?: StructuredAnalysis }).structured ?? null;
+      const analysisStr = (data as { analysis?: string }).analysis || "";
+      if (rawStructured) {
+        setStructured(rawStructured);
+      } else if (analysisStr && analysisStr.trim().startsWith("{")) {
+        const parsed = parseStructuredFromAnalysis(analysisStr);
+        if (parsed) setStructured(parsed);
+        else setStructured(null);
+      } else {
+        setStructured(null);
+      }
       setActiveTab("overview");
       setProgress(100);
       toast.success(t("toastAnalysisComplete"));
@@ -920,6 +1021,73 @@ export default function ResumeAnalyzer() {
 function AnalysisDisplay({ analysis }: { analysis: string }) {
   const fg = "var(--foreground)";
   const accent = "var(--success)";
+
+  // If analysis is JSON, render structured sections instead of raw text
+  const trimmed = analysis.trim();
+  if (trimmed.startsWith("{")) {
+    let data: Record<string, unknown> | undefined;
+    try {
+      const fixed = trimmed.replace(/,\s*([}\]])/g, "$1");
+      data = JSON.parse(fixed) as Record<string, unknown>;
+    } catch {
+      data = undefined;
+    }
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      const score = (v: unknown) => (typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : null);
+      const list = (v: unknown): string[] => (Array.isArray(v) ? v.map((s) => String(s).trim()).filter(Boolean) : []);
+      const text = (v: unknown) => (v != null && String(v).trim() ? String(v).trim() : "");
+
+      return (
+        <div className="space-y-6">
+          {(score(data.ResumeMatchScore) ?? score(data.overallScore)) != null && (
+            <div className="rounded-xl border border-border bg-card/40 p-4 text-center">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Resume Match Score</p>
+              <p className="text-3xl font-bold" style={{ color: accent }}>{score(data.ResumeMatchScore) ?? score(data.overallScore)}%</p>
+            </div>
+          )}
+          {list(data.ImportantSkills ?? data.strengths).length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold mb-2" style={{ color: fg }}>Important skills</h3>
+              <ul className="flex flex-wrap gap-2">
+                {list(data.ImportantSkills ?? data.strengths).map((s, i) => (
+                  <li key={i} className="rounded-lg px-3 py-1.5 bg-muted/50 text-sm" style={{ color: accent }}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {(score(data.ExperienceScore) ?? score(data.experienceScore)) != null && (
+            <div>
+              <h3 className="text-sm font-semibold mb-2" style={{ color: fg }}>Experience score</h3>
+              <p className="text-2xl font-bold" style={{ color: accent }}>{score(data.ExperienceScore) ?? score(data.experienceScore)}/100</p>
+            </div>
+          )}
+          {(score(data.ProjectScore) ?? score(data.projectScore)) != null && (
+            <div>
+              <h3 className="text-sm font-semibold mb-2" style={{ color: fg }}>Project score</h3>
+              <p className="text-2xl font-bold" style={{ color: accent }}>{score(data.ProjectScore) ?? score(data.projectScore)}/100</p>
+            </div>
+          )}
+          {list(data.MissingSkills ?? data.gaps).length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold mb-2" style={{ color: fg }}>Skills to improve</h3>
+              <ul className="flex flex-wrap gap-2">
+                {list(data.MissingSkills ?? data.gaps).map((s, i) => (
+                  <li key={i} className="rounded-lg px-3 py-1.5 border border-border text-sm text-muted-foreground">{s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {text(data.Recommendation ?? data.recommendation) && (
+            <div className="rounded-xl border border-border bg-card/40 p-4">
+              <h3 className="text-sm font-semibold mb-2" style={{ color: fg }}>Recommendation</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">{text(data.Recommendation ?? data.recommendation)}</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+  }
+
   const processedAnalysis = analysis
     .replace(/^# (.*$)/gm, `<div class="text-2xl font-bold mb-4" style="color:${fg}">$1</div>`)
     .replace(/^## (.*$)/gm, `<div class="text-xl font-semibold mb-2" style="color:${fg}">$1</div>`)

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, type ChangeEvent } from "react";
+import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ interface JobItem {
   location: string;
   link: string;
   snippet: string;
+  source?: string;
 }
 
 interface QuizQuestion {
@@ -389,6 +391,18 @@ export default function ResumeAnalyzer() {
       }
       setAnalysis((data as { analysis: string }).analysis || "");
       setStructured((data as { structured?: StructuredAnalysis }).structured || null);
+      console.log({
+        analysis: data.analysis,
+        structured: data.structured,
+        response: response,
+        data: data,
+        headers: headers,
+        formData: formData,
+        apiBase: API_BASE,
+        apiKey: process.env.NEXT_PUBLIC_API_KEY,
+        error: (data as { error?: string }).error,
+      });
+      
       setActiveTab("overview");
       setProgress(100);
       toast.success(t("toastAnalysisComplete"));
@@ -431,6 +445,7 @@ export default function ResumeAnalyzer() {
     setJobs([]);
     const formData = new FormData();
     formData.append("resume", file);
+    if (jobDescription.trim()) formData.append("jobDescription", jobDescription.trim());
     try {
       const response = await fetch(`${API_BASE}/jobs/recommend`, {
         method: "POST", body: formData,
@@ -759,9 +774,10 @@ export default function ResumeAnalyzer() {
                           <p className="text-xs text-muted-foreground font-medium mb-2">{sec.label}</p>
                           <MiniBar score={sec.score} color={sec.color} />
                           <ul className="mt-3 space-y-1">
-                            {sec.details.map((d) => (
-                              <li key={d} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                                <span style={{ color: sec.color }} className="text-[8px]">◆</span>{d}
+                            {sec.details.map((d, idx) => (
+                              <li key={idx} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                                <span style={{ color: sec.color }} className="text-[8px] mt-1 shrink-0">◆</span>
+                                <span>{d}</span>
                               </li>
                             ))}
                           </ul>
@@ -816,82 +832,123 @@ export default function ResumeAnalyzer() {
                             <MiniBar score={sec.score} color={sec.color} />
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {sec.details.map((d) => (
-                            <div key={d} className="bg-muted/30 rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
-                              <span style={{ color: sec.color }} className="text-[8px]">◆</span>{d}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {sec.details.map((d, idx) => (
+                            <div key={idx} className="bg-muted/30 rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-start gap-2">
+                              <span style={{ color: sec.color }} className="text-[8px] mt-1.5 shrink-0">◆</span>
+                              <span>{d}</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     ))}
+
+                    {analysis && (
+                      <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-6">
+                        <h3 className="text-xs tracking-widest uppercase text-muted-foreground mb-4 flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Full Analysis
+                        </h3>
+                        <div className="prose prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground text-sm">
+                          <AnalysisDisplay analysis={analysis} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* ACTIONS */}
                 {activeTab === "actions" && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
-                    <button
-                      onClick={handleDownloadImprovedCv}
-                      disabled={downloadingCv}
-                      className="rounded-2xl border border-success/30 bg-success/5 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-success/50 disabled:opacity-60"
-                    >
-                      <div className="w-11 h-11 rounded-xl bg-success/15 border border-success/30 flex items-center justify-center mb-4">
-                        <Download className="h-5 w-5 text-success" />
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    {/* Download CV section */}
+                    <div>
+                      <h3 className="text-xs tracking-widest uppercase text-muted-foreground mb-3">Download improved CV</h3>
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          onClick={handleDownloadImprovedCv}
+                          disabled={downloadingCv}
+                          className="inline-flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:border-success/50 disabled:opacity-60"
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-success/15 border border-success/30 flex items-center justify-center shrink-0">
+                            <Download className="h-5 w-5 text-success" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-foreground">{downloadingCv ? tCommon("loading") : t("downloadImprovedCv")}</p>
+                            <p className="text-xs text-muted-foreground">DOCX format</p>
+                          </div>
+                        </button>
+                        {/* PDF download commented out - DOCX only for now
+                        <button
+                          onClick={handleDownloadImprovedCvPdf}
+                          disabled={downloadingPdf}
+                          className="inline-flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:border-success/50 disabled:opacity-60"
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-success/15 border border-success/30 flex items-center justify-center shrink-0">
+                            <FileDown className="h-5 w-5 text-success" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-foreground">{downloadingPdf ? tCommon("loading") : "Download PDF"}</p>
+                            <p className="text-xs text-muted-foreground">PDF format</p>
+                          </div>
+                        </button>
+                        */}
                       </div>
-                      <h3 className="text-base font-semibold text-foreground mb-1">
-                        {downloadingCv ? tCommon("loading") : t("downloadImprovedCv")}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">Get AI-improved CV as DOCX aligned to the job description</p>
-                    </button>
-                    <button
-                      onClick={handleDownloadImprovedCvPdf}
-                      disabled={downloadingPdf}
-                      className="rounded-2xl border border-success/30 bg-success/5 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-success/50 disabled:opacity-60"
-                    >
-                      <div className="w-11 h-11 rounded-xl bg-success/15 border border-success/30 flex items-center justify-center mb-4">
-                        <FileDown className="h-5 w-5 text-success" />
+                    </div>
+
+                    {/* Job search & Interview prep - side by side */}
+                    <div>
+                      <h3 className="text-xs tracking-widest uppercase text-muted-foreground mb-3">Prepare for your next steps</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-border bg-card/60 p-5 space-y-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-9 h-9 rounded-lg bg-violet-500/15 border border-violet-500/30 flex items-center justify-center">
+                              <Search className="h-4 w-4 text-violet-500" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-foreground">{t("getJobRecommendations")}</p>
+                              <p className="text-xs text-muted-foreground">Find roles that match your profile worldwide</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={handleGetJobRecommendations}
+                            disabled={loadingJobs}
+                            className="w-full rounded-lg bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/40 px-4 py-2.5 text-sm font-medium text-violet-400 transition-colors disabled:opacity-60"
+                          >
+                            {loadingJobs ? tCommon("loading") : "Find jobs"}
+                          </button>
+                        </div>
+
+                        <div className="rounded-xl border border-border bg-card/60 p-5 space-y-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-9 h-9 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center">
+                              <Sparkles className="h-4 w-4 text-cyan-500" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-foreground">{t("interviewPrep")}</p>
+                              <p className="text-xs text-muted-foreground">{t("interviewPrepNote")}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={handleStartAssessment}
+                            disabled={loadingQuiz || !jobDescription.trim()}
+                            className="w-full rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 px-4 py-2.5 text-sm font-medium text-cyan-400 transition-colors disabled:opacity-60"
+                          >
+                            {loadingQuiz ? tCommon("loading") : "Generate practice questions"}
+                          </button>
+                        </div>
                       </div>
-                      <h3 className="text-base font-semibold text-foreground mb-1">
-                        {downloadingPdf ? tCommon("loading") : "Download improved CV (PDF)"}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">Get AI-improved CV as PDF aligned to the job description</p>
-                    </button>
+                    </div>
+
                     <button
                       onClick={handleStartOver}
-                      className="rounded-2xl border border-border bg-card/60 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-border"
+                      className="w-full rounded-xl border border-border bg-card/60 p-4 flex items-center gap-3 hover:bg-muted/50 transition-colors"
                     >
-                      <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-4">
-                        <RefreshCw className="h-5 w-5 text-amber-500" />
+                      <div className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                        <RefreshCw className="h-4 w-4 text-amber-500" />
                       </div>
-                      <h3 className="text-base font-semibold text-foreground mb-1">{t("startOver")}</h3>
-                      <p className="text-sm text-muted-foreground">Match this CV against a different job description</p>
-                    </button>
-                    <button
-                      onClick={handleGetJobRecommendations}
-                      disabled={loadingJobs}
-                      className="rounded-2xl border border-border bg-card/60 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-border disabled:opacity-60"
-                    >
-                      <div className="w-11 h-11 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center mb-4">
-                        <Search className="h-5 w-5 text-violet-500" />
+                      <div className="text-left">
+                        <p className="font-semibold text-foreground">{t("startOver")}</p>
+                        <p className="text-xs text-muted-foreground">Match against a different job description</p>
                       </div>
-                      <h3 className="text-base font-semibold text-foreground mb-1">
-                        {loadingJobs ? tCommon("loading") : t("getJobRecommendations")}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">Discover jobs that match your experience</p>
-                    </button>
-                    <button
-                      onClick={handleStartAssessment}
-                      disabled={loadingQuiz || !jobDescription.trim()}
-                      className="rounded-2xl border border-border bg-card/60 p-7 text-left transition-all hover:-translate-y-0.5 hover:border-border disabled:opacity-60"
-                    >
-                      <div className="w-11 h-11 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center mb-4">
-                        <Sparkles className="h-5 w-5 text-cyan-500" />
-                      </div>
-                      <h3 className="text-base font-semibold text-foreground mb-1">
-                        {loadingQuiz ? tCommon("loading") : t("interviewPrep")}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">{t("interviewPrepNote")}</p>
                     </button>
                   </div>
                 )}
@@ -910,9 +967,11 @@ export default function ResumeAnalyzer() {
                   <Button onClick={handleDownloadImprovedCv} disabled={downloadingCv} className="rounded-full px-8 py-3 h-auto text-base font-medium">
                     {downloadingCv ? tCommon("loading") : t("downloadImprovedCv")}
                   </Button>
+                  {/* PDF download commented out - DOCX only for now
                   <Button onClick={handleDownloadImprovedCvPdf} disabled={downloadingPdf} className="rounded-full px-8 py-3 h-auto text-base font-medium">
                     {downloadingPdf ? tCommon("loading") : "Download PDF"}
                   </Button>
+                  */}
                   <Button variant="outline" onClick={handleStartOver} className="rounded-full px-8 py-3 h-auto text-base font-medium">
                     {t("startOver")}
                   </Button>
@@ -924,75 +983,96 @@ export default function ResumeAnalyzer() {
               </div>
             )}
 
-            {/* Job recommendations list (shown when jobs loaded) */}
-            {jobs.length > 0 && (
-              <Card className="backdrop-blur-sm overflow-hidden mt-6">
-                <CardHeader className="border-b border-border">
-                  <CardTitle className="text-xl font-semibold flex items-center gap-2">
-                    <Briefcase className="h-5 w-5" /> {t("recommendedJobs")}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <ul className="space-y-4">
-                    {jobs.map((job, i) => (
-                      <li key={i} className="border border-border rounded-lg p-4 hover:bg-muted/50 transition-colors">
-                        <div className="flex justify-between items-start gap-2">
-                          <div>
-                            <h4 className="font-semibold text-foreground">{job.title}</h4>
-                            <p className="text-sm text-muted-foreground">{job.company}</p>
-                            {job.location && <p className="text-xs text-muted-foreground mt-1">{job.location}</p>}
-                            {job.snippet && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{job.snippet}</p>}
-                          </div>
-                          <a href={job.link} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-full p-2 bg-primary text-primary-foreground hover:opacity-90" aria-label={tCommon("open")}>
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Interview quiz (shown when loaded) */}
-            {quizQuestions.length > 0 && (
-              <Card className="backdrop-blur-sm overflow-hidden mt-6">
-                <CardHeader className="border-b border-border">
-                  <CardTitle className="text-xl font-semibold">{t("interviewPrep")}</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">{t("interviewPrepNote")}</p>
-                </CardHeader>
-                <CardContent className="p-6 space-y-6">
-                  {quizQuestions.map((q, i) => (
-                    <div key={i} className="space-y-2">
-                      <p className="font-medium text-foreground">{i + 1}. {q.question}</p>
-                      <div className="space-y-2 pl-2">
-                        {(["A", "B", "C", "D"] as const).map((key) => (
-                          <label
-                            key={key}
-                            className={`flex items-start gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
-                              quizAnswers[i] === key ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50"
-                            } ${quizSubmitted ? (q.correct === key ? "ring-2 ring-green-500" : quizAnswers[i] === key && q.correct !== key ? "ring-2 ring-red-500" : "") : ""}`}
-                          >
-                            <input type="radio" name={`quiz-${i}`} checked={quizAnswers[i] === key} onChange={() => !quizSubmitted && setQuizAnswers((prev) => ({ ...prev, [i]: key }))} className="mt-1" />
-                            <span className="text-sm">{q.options[key]}</span>
-                          </label>
-                        ))}
-                      </div>
-                      {quizSubmitted && <p className="text-sm text-muted-foreground mt-2 pl-2 border-l-2 border-muted">{q.explanation}</p>}
-                    </div>
-                  ))}
-                  {!quizSubmitted ? (
-                    <Button onClick={handleQuizSubmit} className="rounded-full px-8 py-3 h-auto font-medium">{t("submit")}</Button>
-                  ) : (
-                    <p className="font-medium text-foreground">Score: {quizScore} / {quizQuestions.length}</p>
+            {/* Next steps: Job recommendations + Interview quiz - side by side */}
+            {(jobs.length > 0 || quizQuestions.length > 0) && (
+              <div className="mt-8">
+                <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-amber-500" />
+                  Next steps
+                </h2>
+                <div className={`grid gap-6 ${jobs.length > 0 && quizQuestions.length > 0 ? "lg:grid-cols-2" : ""}`}>
+                  {/* Job recommendations */}
+                  {jobs.length > 0 && (
+                    <Card className="backdrop-blur-sm overflow-hidden">
+                      <CardHeader className="border-b border-border py-4">
+                        <CardTitle className="text-base font-semibold flex items-center gap-2">
+                          <Briefcase className="h-4 w-4 text-violet-500" /> {t("recommendedJobs")}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 max-h-[420px] overflow-y-auto">
+                        <ul className="space-y-3">
+                          {jobs.map((job, i) => (
+                            <li key={i} className="border border-border rounded-lg p-3 hover:bg-muted/50 transition-colors">
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="font-medium text-foreground text-sm truncate">{job.title}</h4>
+                                    {job.source && (
+                                      <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+                                        {job.source}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground truncate">{job.company}</p>
+                                  {job.location && <p className="text-xs text-muted-foreground">{job.location}</p>}
+                                  {job.snippet && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{job.snippet}</p>}
+                                </div>
+                                <a href={job.link} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-full p-2 bg-primary text-primary-foreground hover:opacity-90" aria-label={tCommon("open")}>
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
                   )}
-                </CardContent>
-              </Card>
+
+                  {/* Interview quiz */}
+                  {quizQuestions.length > 0 && (
+                    <Card className="backdrop-blur-sm overflow-hidden">
+                      <CardHeader className="border-b border-border py-4">
+                        <CardTitle className="text-base font-semibold flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-cyan-500" /> {t("interviewPrep")}
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground mt-1">{t("interviewPrepNote")}</p>
+                      </CardHeader>
+                      <CardContent className="p-4 max-h-[420px] overflow-y-auto space-y-4">
+                        {quizQuestions.map((q, i) => (
+                          <div key={i} className="space-y-2">
+                            <p className="font-medium text-foreground text-sm">{i + 1}. {q.question}</p>
+                            <div className="space-y-1.5 pl-1">
+                              {(["A", "B", "C", "D"] as const).map((key) => (
+                                <label
+                                  key={key}
+                                  className={`flex items-start gap-2 rounded-lg border p-2.5 cursor-pointer transition-colors text-sm ${
+                                    quizAnswers[i] === key ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50"
+                                  } ${quizSubmitted ? (q.correct === key ? "ring-2 ring-green-500" : quizAnswers[i] === key && q.correct !== key ? "ring-2 ring-red-500" : "") : ""}`}
+                                >
+                                  <input type="radio" name={`quiz-${i}`} checked={quizAnswers[i] === key} onChange={() => !quizSubmitted && setQuizAnswers((prev) => ({ ...prev, [i]: key }))} className="mt-0.5" />
+                                  <span>{q.options[key]}</span>
+                                </label>
+                              ))}
+                            </div>
+                            {quizSubmitted && <p className="text-xs text-muted-foreground pl-2 border-l-2 border-muted">{q.explanation}</p>}
+                          </div>
+                        ))}
+                        {!quizSubmitted ? (
+                          <Button onClick={handleQuizSubmit} className="rounded-lg px-6 py-2.5 h-auto text-sm font-medium">{t("submit")}</Button>
+                        ) : (
+                          <p className="font-medium text-foreground text-sm">Score: {quizScore} / {quizQuestions.length}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}
       </main>
 
+      {/* PDF template modal commented out - DOCX only for now
       {cvTemplatesOpen && cvSections && (() => {
         const cvData = mapSectionsToCVData(cvSections);
         const SelectedComponent = selectedTemplateId ? TEMPLATE_MAP[selectedTemplateId] : null;
@@ -1056,16 +1136,27 @@ export default function ResumeAnalyzer() {
               </div>
             </div>
 
-            {/* Off-screen container for PDF capture */}
-            <div
-              ref={pdfRenderRef}
-              style={{ position: "absolute", left: "-9999px", top: 0, width: 794, background: "#fff" }}
-            >
-              {SelectedComponent && <SelectedComponent data={cvData} />}
-            </div>
+            {typeof document !== "undefined" &&
+              createPortal(
+                <div
+                  ref={pdfRenderRef}
+                  style={{
+                    position: "fixed",
+                    left: "-9999px",
+                    top: 0,
+                    width: 794,
+                    background: "#fff",
+                    zIndex: -1,
+                  }}
+                >
+                  {SelectedComponent && <SelectedComponent data={cvData} />}
+                </div>,
+                document.body,
+              )}
           </>
         );
       })()}
+      */}
 
       <Analytics />
     </div>

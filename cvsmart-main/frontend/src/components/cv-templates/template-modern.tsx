@@ -20,7 +20,7 @@ export function TemplateModern({ data }: Props) {
 
   return (
     <div
-      style={{ fontSize: 13, fontFamily: "'Open Sans', sans-serif", display: "flex", minHeight: 700, backgroundColor: "#ffffff", boxShadow: "0 20px 25px -5px rgba(0,0,0,.1)" }}
+      style={{ fontSize: 13, fontFamily: "'Open Sans', sans-serif", display: "flex", minHeight: 700, backgroundColor: "#ffffff", boxShadow: "0 20px 25px -5px rgba(0,0,0,.1)", padding: 24, boxSizing: "border-box" }}
     >
       {/* Sidebar */}
       <div style={{ width: 280, backgroundColor: "#F7E0C1", padding: 28, flexShrink: 0 }}>

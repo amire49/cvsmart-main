@@ -20,7 +20,7 @@ export function TemplateMinimal({ data }: Props) {
 
   return (
     <div
-      style={{ fontSize: 13, fontFamily: "'Open Sans', sans-serif", minHeight: 700, backgroundColor: "#ffffff" }}
+      style={{ fontSize: 13, fontFamily: "'Open Sans', sans-serif", minHeight: 700, backgroundColor: "#ffffff", padding: 24, boxSizing: "border-box" }}
     >
       {/* Header */}
       <div style={{ backgroundColor: "#434E5E", color: "#ffffff", padding: "28px 32px" }}>

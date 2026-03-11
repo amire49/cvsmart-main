@@ -3,6 +3,7 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import logging
+import concurrent.futures
 import pdfplumber
 from docx import Document
 import google.generativeai as genai
@@ -40,158 +41,127 @@ GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 if not GOOGLE_API_KEY:
     raise ValueError("No GOOGLE_API_KEY found in environment variables")
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel(
+
+ANALYSIS_SYSTEM = """You are a senior recruiter and career coach. You ONLY output valid JSON. No markdown, no code fences, no explanation outside the JSON.
+
+Given a resume and job description, return a single JSON object with these exact keys:
+
+{
+  "overallScore": <integer 0-100>,
+  "technicalScore": <integer 0-100>,
+  "technicalDetails": ["<concise finding>", "<concise finding>", "<concise finding>"],
+  "experienceScore": <integer 0-100>,
+  "experienceDetails": ["<concise finding>", "<concise finding>", "<concise finding>"],
+  "projectScore": <integer 0-100>,
+  "projectDetails": ["<concise finding>", "<concise finding>", "<concise finding>"],
+  "communicationScore": <integer 0-100>,
+  "communicationDetails": ["<concise finding>", "<concise finding>", "<concise finding>"],
+  "strengths": ["<key strength 1>", "<key strength 2>", "<key strength 3>"],
+  "gaps": ["<key gap 1>", "<key gap 2>", "<key gap 3>"],
+  "recommendation": "<2-3 sentence summary of overall fit and top advice>",
+  "analysis": "<full detailed analysis as a single string with markdown formatting>"
+}
+
+Rules for each field:
+- overallScore: genuine 0-100 based on skills match, experience relevance, education, projects. Use the full range.
+- technicalScore: how well the candidate's technical skills match the JD requirements (0-100).
+- technicalDetails: exactly 3 concise bullets about matched skills, partial matches, and missing skills.
+- experienceScore: how relevant the candidate's work experience is (0-100).
+- experienceDetails: exactly 3 concise bullets about high-impact experience, experience gaps, years of experience fit.
+- projectScore: how well projects/portfolio demonstrate required capabilities (0-100).
+- projectDetails: exactly 3 concise bullets about relevant projects, missing project evidence, portfolio quality.
+- communicationScore: soft skills, teamwork, communication, cultural fit assessment (0-100).
+- communicationDetails: exactly 3 concise bullets about communication, leadership, collaboration indicators.
+- strengths: exactly 3 key strengths of this candidate for this role.
+- gaps: exactly 3 key gaps or missing qualifications.
+- recommendation: 2-3 sentences of professional advice summarizing the match and top actions.
+- analysis: a thorough markdown-formatted analysis (use headings, bullets, bold) covering:
+  1. Overall Match Score with percentage
+  2. Key Skills Match (matched, partial, missing)
+  3. Experience Relevance (high-impact, gaps)
+  4. Top 3-5 Improvement Tips (specific, actionable)
+
+Keep each detail string under 100 characters. The analysis string can be longer (500-1500 words).
+Do NOT invent information not in the resume or job description."""
+
+model = genai.GenerativeModel(model_name='gemini-2.5-flash')
+
+model_analysis = genai.GenerativeModel(
     model_name='gemini-2.5-flash',
-    system_instruction="""You are a highly experienced senior recruiter and career coach with over 25 years of experience, specializing in the tech industry. Your task is to provide a comprehensive analysis comparing the provided resume against the given job description.
+    system_instruction=ANALYSIS_SYSTEM,
+)
 
-**Output Format:** Structure your response EXACTLY as follows:
 
-1.  Overall Match Score: 🎯  Calculate a percentage score between 0-100% based on:
-   - Skills match: Count matched skills vs required skills
-   - Experience relevance: Evaluate how closely experience aligns with job requirements
-   - Education/qualifications match: Compare required vs present qualifications
-   - Project relevance: Assess if projects demonstrate required capabilities
-   
-   The final score should reflect a genuine assessment - use the full range from 20-95% depending on the actual match quality.
-2.  Score Summary: 📊  Very Briefly (2-3 bullet points max) highlighting the *absolute key factor(s)* determining the score (e.g., "Strong experience in cloud technologies, but lacks specific project management experience.").
-3.  General Match Assessment: 🔍 A brief narrative (2-3 sentences) summarizing how well the candidate's profile aligns with the role requirements.
-4.  Key Highlights & Gaps:
-     Key Skills Match:
-           ✅ Top Matched Skills: List specific skills/technologies from the resume that directly match critical requirements in the job description.
-           ⚠️ Partial Matches: Identify skills present in the resume that are relevant but could be emphasized more or lack specific context mentioned in the job description.
-           ❌ Critical Missing Skills: List the *most critical* skills required by the job description that appear to be missing or not written in the resume.
-     Experience Relevance:
-              🌟 High-Impact Experience: Point out specific job experiences, projects, or accomplishments in the resume that strongly align with the responsibilities and goals outlined in the job description.
-              🔍 Experience Gaps: Mention key areas of experience required by the job description that are not evident in the resume.
-5.  Top Improvement Tips: 💡 Provide ONLY 3-5 specific, actionable recommendations that would have the HIGHEST IMPACT for this specific resume and job. Focus on the most critical gaps or areas for improvement. Do not list all possible improvements - prioritize based on:
-   - How critical the gap is to the job requirements
-   - How easily the candidate could address the issue
-   - How much impact the change would have on their match score
+def build_structured_from_json(data):
+    """Convert the JSON response from Gemini into the frontend-expected structure."""
+    if not isinstance(data, dict):
+        return None
 
-      🛠️ Address Missing [Skill/Gaps]: Suggest how (e.g., "Highlight Python in Project X more" or "Add a section on cloud certifications").
-      📊 Quantify Achievements: "Quantify your impact in Project X by adding metrics like 'reduced processing time by 15%' or 'managed a budget of $Y'."
-      🔑 Incorporate Keywords: "Integrate keywords like 'cloud infrastructure management', 'CI/CD pipelines', and 'Agile methodologies' found in the job description into your relevant experience descriptions."
-      ✏️ Refine Bullet Points: "Rephrase the bullet point about 'Developed software' under Job Z to highlight 'Developed scalable microservices using Python (Flask) and deployed on AWS ECS', aligning better with the JD's focus on microservices and cloud deployment."
-      📁 Add Specific Projects: "Consider adding a brief section on Project A, emphasizing the use of [Specific Tech from JD], if applicable."
-      🖋️ Formatting/Clarity: "Ensure consistent date formatting. Consider using the STAR method (Situation, Task, Action, Result) for key accomplishment bullet points."
-      🎯 Tailor Summary/Objective: "Update summary with keywords 'X' and 'Y' from the Job Description."
+    def _int(val, default=50):
+        try:
+            return max(0, min(100, int(val)))
+        except (TypeError, ValueError):
+            return default
 
-**Tone:** Be professional, constructive, clear, actionable, and highly specific. Your goal is to empower the user to significantly improve their resume for this target role. Do not invent information not present in the resume or job description."""
-    )
+    def _list(val, fallback="See full analysis"):
+        if isinstance(val, list) and val:
+            return [str(s).strip()[:100] for s in val if str(s).strip()][:4] or [fallback]
+        return [fallback]
 
-def extract_structured_from_analysis(text):
-    """Parse the markdown analysis text to build structured dashboard data."""
-    score = 50
-    m = re.search(r'(\d{1,3})\s*%', text[:600])
-    if m:
-        score = min(100, max(0, int(m.group(1))))
+    def _str(val, default=""):
+        return str(val).strip() if val else default
 
-    if score >= 75:
+    overall = _int(data.get("overallScore"), 50)
+
+    if overall >= 75:
         verdict, verdict_color = "Strong Match", "#00e5a0"
-    elif score >= 50:
+    elif overall >= 50:
         verdict, verdict_color = "Conditional Match", "#f4a261"
     else:
         verdict, verdict_color = "Weak Match", "#ff4d6d"
 
-    def _extract_items(pattern, text, max_items=4):
-        items = []
-        for m in re.finditer(pattern, text):
-            line = m.group(1).strip()
-            line = re.sub(r'\*\*', '', line).strip()
-            if len(line) > 10:
-                items.append(line[:100])
-            if len(items) >= max_items:
-                break
-        return items
-
-    matched = _extract_items(r'✅\s*(.*)', text)
-    partial = _extract_items(r'⚠️\s*(.*)', text)
-    missing = _extract_items(r'❌\s*(.*)', text)
-    high_impact = _extract_items(r'🌟\s*(.*)', text)
-    exp_gaps = _extract_items(r'🔍\s*Experience\s*Gaps?[:\s]*(.*)', text)
-    tips = _extract_items(r'(?:🛠️|📊|🔑|✏️|📁|🖋️|🎯)\s*(.*)', text, 6)
-
-    tech_details = (matched + partial)[:4] or ["See full analysis"]
-    tech_score = min(100, max(0, int(score * 1.15))) if matched else max(0, score - 10)
-
-    exp_details = []
-    exp_section = False
-    for line in text.split('\n'):
-        low = line.lower()
-        if 'experience relevance' in low or 'experience gaps' in low:
-            exp_section = True
-            continue
-        if exp_section:
-            if line.strip() == '' or line.startswith('#'):
-                exp_section = False
-                continue
-            cleaned = re.sub(r'[*#🌟🔍\-]', '', line).strip()
-            if 10 < len(cleaned) < 120:
-                exp_details.append(cleaned[:100])
-    if not exp_details:
-        for line in text.split('\n'):
-            low = line.lower()
-            if any(k in low for k in ['years of experience', 'experience gap', 'required:', 'professional experience']):
-                cleaned = re.sub(r'[*#\-]', '', line).strip()
-                if 10 < len(cleaned) < 120 and cleaned not in exp_details:
-                    exp_details.append(cleaned[:100])
-    exp_details = exp_details[:4] or ["See full analysis"]
-    exp_score = max(0, score - 15) if missing else score
-
-    proj_details = (high_impact[:4]) if high_impact else ["See full analysis"]
-    proj_score = min(100, max(0, int(score * 1.05)))
-
-    soft_details = []
-    for kw in ['communication', 'remote', 'team', 'leader', 'mentor', 'self-directed', 'collaboration']:
-        for line in text.split('\n'):
-            if kw in line.lower() and len(line.strip()) > 10:
-                cleaned = re.sub(r'[*#\-]', '', line).strip()[:100]
-                if cleaned not in soft_details:
-                    soft_details.append(cleaned)
-                break
-    soft_details = soft_details[:4] or ["See full analysis"]
-    soft_score = max(0, min(100, score + 5))
-
-    strengths = []
-    for item in matched[:2] + high_impact[:1]:
-        s = re.sub(r'[*]', '', item).strip()
-        if s:
-            strengths.append(s)
-    if not strengths:
-        strengths = ["See full analysis for strengths"]
-
-    gaps = []
-    for item in missing[:2] + exp_gaps[:1]:
-        s = re.sub(r'[*]', '', item).strip()
-        if s:
-            gaps.append(s)
-    if not gaps:
-        gaps = ["See full analysis for gaps"]
-
-    rec = ""
-    m = re.search(r'General Match Assessment.*?\n\n(.*?)(?:\n\n|\nKey|\n\d)', text, re.DOTALL)
-    if m:
-        rec = re.sub(r'[*#🔍]', '', m.group(1)).strip()[:250]
-    if not rec:
-        m2 = re.search(r'🔍.*?General Match Assessment.*?\n+(.*?)(?:\n\n)', text, re.DOTALL)
-        if m2:
-            rec = re.sub(r'[*#🔍]', '', m2.group(1)).strip()[:250]
-    if not rec:
-        rec = f"Overall match score: {score}%. See the full analysis for detailed recommendations."
-
     return {
-        "overallScore": score,
+        "overallScore": overall,
         "verdict": verdict,
         "verdictColor": verdict_color,
         "sections": [
-            {"id": "technical", "label": "Technical Alignment", "score": tech_score, "color": "#00e5a0", "icon": "⚡", "details": tech_details},
-            {"id": "experience", "label": "Experience Match", "score": exp_score, "color": "#ff4d6d", "icon": "📅", "details": exp_details},
-            {"id": "projects", "label": "Project Relevance", "score": proj_score, "color": "#00b4d8", "icon": "🏗️", "details": proj_details},
-            {"id": "softskills", "label": "Communication & Fit", "score": soft_score, "color": "#f4a261", "icon": "💬", "details": soft_details},
+            {
+                "id": "technical",
+                "label": "Technical Alignment",
+                "score": _int(data.get("technicalScore"), overall),
+                "color": "#00e5a0",
+                "icon": "⚡",
+                "details": _list(data.get("technicalDetails")),
+            },
+            {
+                "id": "experience",
+                "label": "Experience Match",
+                "score": _int(data.get("experienceScore"), overall),
+                "color": "#ff4d6d",
+                "icon": "📅",
+                "details": _list(data.get("experienceDetails")),
+            },
+            {
+                "id": "projects",
+                "label": "Project Relevance",
+                "score": _int(data.get("projectScore"), overall),
+                "color": "#00b4d8",
+                "icon": "🏗️",
+                "details": _list(data.get("projectDetails")),
+            },
+            {
+                "id": "softskills",
+                "label": "Communication & Fit",
+                "score": _int(data.get("communicationScore"), overall),
+                "color": "#f4a261",
+                "icon": "💬",
+                "details": _list(data.get("communicationDetails")),
+            },
         ],
-        "strengths": strengths[:3],
-        "gaps": gaps[:3],
-        "recommendation": rec,
+        "strengths": _list(data.get("strengths"), "See full analysis for strengths")[:3],
+        "gaps": _list(data.get("gaps"), "See full analysis for gaps")[:3],
+        "recommendation": _str(data.get("recommendation"),
+                               f"Overall match score: {overall}%. See full analysis for details.")[:300],
     }
 
 UPLOAD_FOLDER = 'uploads'
@@ -219,24 +189,43 @@ def extract_text_from_docx(file_path):
         text += paragraph.text + "\n"
     return text
 
-def extract_keywords_from_resume(resume_text, max_keywords=8):
-    """Use Gemini to extract job-relevant keywords from resume text."""
+def extract_keywords_from_resume(resume_text, job_description="", max_keywords=12):
+    """Use Gemini to extract job-relevant keywords and suggested job titles from resume (and optional job description)."""
     if not resume_text or len(resume_text.strip()) < 50:
         words = re.findall(r'[a-zA-Z]{3,}', resume_text[:500])
-        return list(dict.fromkeys(words))[:max_keywords] if words else ["software", "developer"]
+        return list(dict.fromkeys(words))[:max_keywords] if words else ["software", "developer"], []
+
+    jd_context = ""
+    if job_description and len(job_description.strip()) > 20:
+        jd_context = f"\n\nTarget job description (use to align keywords):\n{job_description[:2000]}"
+
     try:
-        prompt = f"""From this resume text, list exactly {max_keywords} job-relevant skills, technologies, or role keywords (e.g. Python, project management, AWS). One per line, no numbering. Only the keywords, nothing else."""
+        prompt = f"""From this resume text, extract:
+1. Exactly {max_keywords} job-relevant skills, technologies, or role keywords (e.g. Python, project management, AWS). One per line.
+2. Then on a new line write "JOB_TITLES:" followed by 2-3 suggested job titles the candidate could search for (e.g. Software Engineer, Full Stack Developer). Comma-separated.
+Output format: keywords first (one per line), then "JOB_TITLES: title1, title2, title3". Only the keywords and job titles, nothing else."""
         response = model.generate_content(
-            prompt + "\n\nResume:\n" + resume_text[:4000],
-            generation_config=genai.GenerationConfig(temperature=0.1, max_output_tokens=200),
+            prompt + "\n\nResume:\n" + resume_text[:4000] + jd_context,
+            generation_config=genai.GenerationConfig(temperature=0.1, max_output_tokens=300),
         )
         text = (response.text or "").strip()
-        keywords = [line.strip() for line in text.split("\n") if line.strip() and len(line.strip()) < 50]
+        keywords = []
+        job_titles = []
+        for line in text.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            if line.upper().startswith("JOB_TITLES:"):
+                titles_str = line.split(":", 1)[-1].strip()
+                job_titles = [t.strip() for t in titles_str.split(",") if t.strip() and len(t.strip()) < 60]
+                break
+            if len(line) < 50 and line not in keywords:
+                keywords.append(line)
         keywords = keywords[:max_keywords]
-        return keywords if keywords else ["software", "developer"]
+        return keywords if keywords else ["software", "developer"], job_titles[:3]
     except Exception:
         words = re.findall(r'[a-zA-Z]{3,}', resume_text[:500])
-        return list(dict.fromkeys(words))[:max_keywords] if words else ["software", "developer"]
+        return list(dict.fromkeys(words))[:max_keywords] if words else ["software", "developer"], []
 
 
 def _parse_resume_heuristic(resume_text, job_description=""):
@@ -456,7 +445,7 @@ def fetch_jobs_from_adzuna(keywords, country="gb", per_page=10):
     if not app_id or not app_key:
         logging.warning("ADZUNA_APP_ID or ADZUNA_APP_KEY not set; returning empty job list")
         return []
-    query = " ".join(keywords[:3])  # use first 3 keywords for search
+    query = " ".join(keywords[:5])
     url = f"https://api.adzuna.com/v1/api/jobs/{country}/search/1"
     params = {"app_id": app_id, "app_key": app_key, "what": query, "results_per_page": per_page}
     try:
@@ -472,11 +461,146 @@ def fetch_jobs_from_adzuna(keywords, country="gb", per_page=10):
                 "location": r.get("location", {}).get("display_name", "") if isinstance(r.get("location"), dict) else str(r.get("location", "")),
                 "link": r.get("redirect_url", ""),
                 "snippet": (r.get("description", "") or "")[:200],
+                "source": "adzuna",
             })
         return jobs
     except Exception as e:
         logging.exception("Adzuna API error: %s", e)
         return []
+
+
+def _normalize_job(job):
+    """Normalize job to common shape with source."""
+    return {
+        "title": (job.get("title") or "").strip(),
+        "company": (job.get("company") or "").strip(),
+        "location": (job.get("location") or "").strip() if isinstance(job.get("location"), str) else "",
+        "link": (job.get("link") or "").strip(),
+        "snippet": (job.get("snippet") or "")[:200],
+        "source": job.get("source", "unknown"),
+    }
+
+
+def merge_and_deduplicate(job_lists, max_jobs=25):
+    """Merge job lists from multiple sources, deduplicate by title+company, cap total."""
+    seen = set()
+    merged = []
+    for lst in job_lists:
+        for job in lst:
+            n = _normalize_job(job)
+            if not n["title"] or not n["link"]:
+                continue
+            key = (n["title"].lower()[:50], n["company"].lower()[:50])
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(n)
+            if len(merged) >= max_jobs:
+                return merged
+    return merged
+
+
+def rank_jobs_by_relevance(jobs, resume_text, max_to_rank=15):
+    """Use Gemini to score job relevance (1-10) and sort by score."""
+    if not jobs or not resume_text or len(resume_text) < 50:
+        return jobs
+    to_rank = jobs[:max_to_rank]
+    try:
+        job_list = "\n".join(
+            f"{i+1}. {j['title']} at {j['company']}: {j['snippet'][:80]}..."
+            for i, j in enumerate(to_rank)
+        )
+        prompt = f"""Given this resume summary, score each job's relevance from 1-10. Resume: {resume_text[:6000]}\n\nJobs:\n{job_list}\n\nRespond with exactly {len(to_rank)} numbers, one per line, in order (e.g. 8, 7, 9, ...). Only the numbers."""
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(temperature=0.1, max_output_tokens=100),
+        )
+        text = (response.text or "").strip()
+        scores = []
+        for line in text.split("\n"):
+            for part in re.split(r"[\s,]+", line.strip()):
+                if part.isdigit():
+                    scores.append(int(part))
+                    if len(scores) >= len(to_rank):
+                        break
+            if len(scores) >= len(to_rank):
+                break
+        if len(scores) >= len(to_rank):
+            ranked = sorted(zip(to_rank, scores), key=lambda x: -x[1])
+            return [j for j, _ in ranked] + jobs[max_to_rank:]
+    except Exception as e:
+        logging.warning("Relevance ranking failed: %s", e)
+    return jobs
+
+
+def fetch_jobs_from_jsearch(keywords, location="", per_page=10):
+    """Fetch job listings from JSearch API (RapidAPI) - aggregates Indeed, LinkedIn, etc."""
+    api_key = os.getenv("RAPIDAPI_KEY")
+    if not api_key:
+        logging.debug("RAPIDAPI_KEY not set; skipping JSearch")
+        return []
+    query = " ".join(keywords[:5])
+    url = "https://jsearch.p.rapidapi.com/search"
+    params = {"query": query, "page": "1", "num_pages": "1"}
+    if location:
+        params["query"] = f"{query} {location}"
+    headers = {
+        "X-RapidAPI-Key": api_key,
+        "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+    }
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("data") or []
+        jobs = []
+        for r in results[:per_page]:
+            loc = r.get("job_city") or r.get("job_country") or ""
+            if r.get("job_is_remote"):
+                loc = "Remote" if not loc else f"{loc} (Remote)"
+            jobs.append({
+                "title": r.get("job_title") or r.get("title", ""),
+                "company": r.get("employer_name") or r.get("company_name", ""),
+                "location": loc,
+                "link": r.get("job_apply_link") or r.get("job_google_link") or r.get("url", ""),
+                "snippet": (r.get("job_description") or r.get("description") or "")[:200],
+                "source": "jsearch",
+            })
+        return jobs
+    except Exception as e:
+        logging.exception("JSearch API error: %s", e)
+        return []
+
+
+def fetch_jobs_from_arbeitnow(keywords, location="", per_page=10):
+    """Fetch job listings from Arbeitnow API (no auth required)."""
+    query = " ".join(keywords[:4])
+    url = "https://arbeitnow.com/api/job-board-api"
+    params = {"search": query}
+    if location:
+        params["location"] = location
+    try:
+        resp = requests.get(url, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("data") or []
+        jobs = []
+        for r in results[:per_page]:
+            slug = r.get("slug", "")
+            link = f"https://arbeitnow.com/view/job/{slug}" if slug else r.get("url", "")
+            jobs.append({
+                "title": r.get("title", ""),
+                "company": r.get("company_name", ""),
+                "location": (r.get("location") or {}).get("name", "") if isinstance(r.get("location"), dict) else str(r.get("location") or ""),
+                "link": link,
+                "snippet": re.sub(r"<[^>]+>", "", (r.get("description") or "")[:200]),
+                "source": "arbeitnow",
+            })
+        return jobs
+    except Exception as e:
+        logging.exception("Arbeitnow API error: %s", e)
+        return []
+
 
 @app.before_request
 def require_api_key():
@@ -521,48 +645,64 @@ def analyze_resume():
             # Clean up the uploaded file
             os.remove(file_path)
             
-            # Prepare prompt for Gemini
-            prompt = f"""
-            Please analyze this resume against the job description. Consider:
-            1. Key skills match
-            2. Experience relevance
-            3. Missing critical requirements
-            4. Suggested improvements
-            
-            Resume:
-            {resume_text}
-            
-            Job Description:
-            {job_description}
-            """
-            
-            # Get text analysis from Gemini
-            response = model.generate_content(
-                prompt,
-                generation_config = genai.GenerationConfig(
-                    temperature=0.2,
-                ))
-            analysis = response.text
+            prompt = f"Resume:\n{resume_text[:8000]}\n\nJob Description:\n{job_description[:4000]}"
 
-            # Build structured dashboard data by parsing the text analysis
-            structured = None
-            try:
-                structured = extract_structured_from_analysis(analysis)
-            except Exception as struct_err:
-                logging.warning("Structured extraction failed: %s", struct_err)
-            
+            response = model_analysis.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.05,
+                    max_output_tokens=8000,
+                    response_mime_type="application/json",
+                ),
+            )
+            text = (response.text or "").strip()
+
+            data = None
+            if text:
+                if "```" in text:
+                    parts = re.split(r"```(?:\w*)\s*\n?", text, maxsplit=1)
+                    if len(parts) > 1:
+                        text = parts[1]
+                    text = re.sub(r"\s*```\s*$", "", text).strip()
+                start = text.find("{")
+                end = text.rfind("}")
+                if start != -1 and end != -1 and end > start:
+                    text = text[start : end + 1]
+                text_fixed = re.sub(r",\s*([}\]])", r"\1", text)
+                try:
+                    data = json.loads(text_fixed)
+                except json.JSONDecodeError:
+                    logging.warning("analyze: JSON parse failed, raw (500 chars): %s", text[:500])
+
+            if isinstance(data, dict):
+                analysis = data.get("analysis") or ""
+                structured = build_structured_from_json(data)
+            else:
+                analysis = response.text or ""
+                structured = None
+
             return jsonify({'analysis': analysis, 'structured': structured})
             
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            logging.exception("analyze_resume Gemini error: %s", e)
+            msg = str(e)
+            lower = msg.lower()
+            if "429" in msg or "quota" in lower or "rate limit" in lower:
+                return jsonify({
+                    'error': 'AI quota has been exceeded for now. Please wait a minute and try again.'
+                }), 503
+            return jsonify({
+                'error': 'AI analysis is temporarily unavailable. Please try again in a moment.'
+            }), 500
     
     return jsonify({'error': 'Invalid file type'}), 400
 
 @app.route('/jobs/recommend', methods=['POST'])
 @limiter.limit("20 per minute")
 def jobs_recommend():
-    """Recommend jobs based on resume (file or text)."""
+    """Recommend jobs based on resume (file or text), aggregating from multiple APIs."""
     resume_text = request.form.get("resumeText", "").strip()
+    job_description = request.form.get("jobDescription", "").strip()
     file = request.files.get("resume") if "resume" in request.files else None
 
     if not resume_text and (not file or not file.filename):
@@ -584,10 +724,46 @@ def jobs_recommend():
     if not resume_text or len(resume_text) < 20:
         return jsonify({"error": "Could not extract enough text from resume"}), 400
 
-    keywords = extract_keywords_from_resume(resume_text)
-    country = request.form.get("country", "gb")
-    jobs = fetch_jobs_from_adzuna(keywords, country=country, per_page=10)
-    return jsonify({"jobs": jobs})
+    keywords, job_titles = extract_keywords_from_resume(resume_text, job_description)
+    search_keywords = keywords[:5]
+    if job_titles:
+        search_keywords = job_titles[:2] + search_keywords
+
+    def fetch_adzuna_all():
+        """Fetch from multiple regions for broader coverage."""
+        jobs = []
+        for country in ("gb", "us", "de"):
+            jobs.extend(fetch_jobs_from_adzuna(search_keywords, country=country, per_page=5))
+        return jobs[:15]
+
+    def fetch_jsearch():
+        return fetch_jobs_from_jsearch(search_keywords, location="", per_page=10)
+
+    def fetch_arbeitnow():
+        return fetch_jobs_from_arbeitnow(search_keywords, location="", per_page=10)
+
+    job_lists = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        sources = [
+            ("adzuna", fetch_adzuna_all),
+            ("jsearch", fetch_jsearch),
+            ("arbeitnow", fetch_arbeitnow),
+        ]
+        future_to_name = {executor.submit(fn): name for name, fn in sources}
+        for fut in concurrent.futures.as_completed(future_to_name):
+            name = future_to_name[fut]
+            try:
+                result = fut.result()
+                logging.info("jobs_recommend: %s returned %d jobs", name, len(result) if isinstance(result, list) else -1)
+                job_lists.append(result if isinstance(result, list) else [])
+            except Exception as e:
+                logging.warning("jobs_recommend: %s fetch failed: %s", name, e)
+                job_lists.append([])
+
+    jobs = merge_and_deduplicate(job_lists, max_jobs=25)
+    jobs = rank_jobs_by_relevance(jobs, resume_text, max_to_rank=15)
+    sources = list(dict.fromkeys(j.get("source", "") for j in jobs if j.get("source")))
+    return jsonify({"jobs": jobs, "sources": sources})
 
 IMPROVE_SYSTEM = """You are an expert resume writer. Given a resume, job description, and optional feedback, produce an IMPROVED version as plain text. Do NOT invent facts. Use section headers in ALL CAPS on their own line: SUMMARY, EXPERIENCE, EDUCATION, SKILLS. Output only the improved resume text."""
 
@@ -1202,6 +1378,75 @@ For each question provide:
 Output ONLY a single JSON object. No markdown, no code fences, no text before or after. Valid JSON only:
 {"questions": [{"question": "Question text?", "options": {"A": "Choice A", "B": "Choice B", "C": "Choice C", "D": "Choice D"}, "correct": "A", "explanation": "Short explanation."}]}"""
 
+
+def _parse_assess_response(text):
+    """Parse Gemini response into questions list."""
+    text = (text or "").strip()
+    if not text:
+        return []
+    # Strip markdown code block if present
+    if "```" in text:
+        parts = re.split(r"```(?:\w*)\s*\n?", text, maxsplit=1)
+        if len(parts) > 1:
+            text = parts[1]
+        text = re.sub(r"\s*```\s*$", "", text)
+    text = text.strip()
+    if not text:
+        return []
+    # Extract JSON object
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return []
+    text = text[start : end + 1]
+    # Fix common JSON issues
+    text_fixed = re.sub(r",\s*([}\]])", r"\1", text)
+    try:
+        data = json.loads(text_fixed)
+    except json.JSONDecodeError:
+        return []
+    questions = data.get("questions") or []
+    if not isinstance(questions, list):
+        return []
+    return questions
+
+
+def _parse_assess_questions(raw_questions):
+    """Validate and normalize questions to expected shape."""
+    out = []
+    for q in raw_questions[:8]:
+        if not isinstance(q, dict):
+            continue
+        opts = q.get("options") or {}
+        # Accept options with keys A,B,C,D or 0,1,2,3 or first 4 keys
+        option_keys = list(opts.keys()) if isinstance(opts, dict) else []
+        if len(option_keys) < 2:
+            continue
+        # Map to A,B,C,D
+        key_map = {}
+        for i, k in enumerate(option_keys[:4]):
+            key_map[k] = ("A", "B", "C", "D")[i]
+        normalized = {}
+        for k, v in opts.items():
+            if k in key_map:
+                normalized[key_map[k]] = str(v) if v else ""
+        for letter in ("A", "B", "C", "D"):
+            if letter not in normalized:
+                normalized[letter] = ""
+        correct = str(q.get("correct", "")).upper()
+        if correct in key_map:
+            correct = key_map[correct]
+        elif correct not in ("A", "B", "C", "D"):
+            correct = "A" if normalized.get("A") else list(normalized.keys())[0]
+        out.append({
+            "question": str(q.get("question", ""))[:500],
+            "options": {k: str(normalized.get(k, ""))[:200] for k in ("A", "B", "C", "D")},
+            "correct": correct,
+            "explanation": str(q.get("explanation", ""))[:300],
+        })
+    return out
+
+
 @app.route('/assess/generate', methods=['POST'])
 @limiter.limit("10 per minute")
 def assess_generate():
@@ -1222,63 +1467,67 @@ def assess_generate():
             if os.path.exists(file_path):
                 os.remove(file_path)
 
-    prompt = f"Job description:\n{job_description[:4000]}\n\n"
+    # Instructions first, then data (better for model)
+    prompt = ASSESS_PROMPT + "\n\n---\n\nJob description:\n" + job_description[:4000]
     if resume_text:
-        prompt += f"Candidate resume (for context only):\n{resume_text[:2000]}\n\n"
-    prompt += ASSESS_PROMPT
+        prompt += "\n\nCandidate resume (for context):\n" + resume_text[:2000]
 
-    try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(temperature=0.4, max_output_tokens=4000),
-        )
-        text = (response.text or "").strip()
-        # Strip markdown code block if present (e.g. ```json ... ``` or ```\n...```)
-        if "```" in text:
-            parts = re.split(r"```(?:\w*)\s*\n?", text, maxsplit=1)
-            if len(parts) > 1:
-                text = parts[1]
-            text = re.sub(r"\s*```\s*$", "", text)
-        text = text.strip()
-        # Extract JSON object: find first { and last }
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            text = text[start : end + 1]
+    for attempt in range(2):
         try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            # Try removing trailing commas before ] or }
-            text_fixed = re.sub(r",\s*([}\]])", r"\1", text)
-            try:
-                data = json.loads(text_fixed)
-            except json.JSONDecodeError as parse_err:
-                logging.warning("assess/generate raw response (first 500 chars): %s", text[:500])
-                raise parse_err
-        questions = data.get("questions") or []
-        if not isinstance(questions, list):
-            questions = []
-        # Validate shape
-        out = []
-        for q in questions[:8]:
-            if not isinstance(q, dict): continue
-            opts = q.get("options") or {}
-            if not all(k in opts for k in ("A", "B", "C", "D")): continue
-            correct = q.get("correct")
-            if correct not in ("A", "B", "C", "D"): continue
-            out.append({
-                "question": str(q.get("question", "")),
-                "options": {k: str(opts.get(k, "")) for k in ("A", "B", "C", "D")},
-                "correct": correct,
-                "explanation": str(q.get("explanation", "")),
-            })
-        return jsonify({"questions": out})
-    except json.JSONDecodeError as e:
-        logging.warning("assess/generate JSON parse error: %s", e)
-        return jsonify({"error": "Failed to generate questions", "questions": []}), 200
-    except Exception as e:
-        logging.exception("assess/generate error: %s", e)
-        return jsonify({"error": str(e)}), 500
+            config_kw = {"temperature": 0.3 if attempt == 0 else 0.2, "max_output_tokens": 4000}
+            if attempt == 0:
+                config_kw["response_mime_type"] = "application/json"
+            config = genai.GenerationConfig(**config_kw)
+            response = model.generate_content(prompt, generation_config=config)
+            text = (response.text or "").strip()
+            if not text:
+                logging.warning("assess/generate empty response from model")
+                continue
+
+            raw = _parse_assess_response(text)
+            out = _parse_assess_questions(raw)
+
+            # Also try strict format if lenient parsing got nothing
+            if not out and raw:
+                for q in raw[:8]:
+                    if not isinstance(q, dict):
+                        continue
+                    opts = q.get("options") or {}
+                    if not all(k in opts for k in ("A", "B", "C", "D")):
+                        continue
+                    correct = q.get("correct")
+                    if correct not in ("A", "B", "C", "D"):
+                        continue
+                    out.append({
+                        "question": str(q.get("question", "")),
+                        "options": {k: str(opts.get(k, "")) for k in ("A", "B", "C", "D")},
+                        "correct": correct,
+                        "explanation": str(q.get("explanation", "")),
+                    })
+
+            if out:
+                return jsonify({"questions": out})
+
+        except json.JSONDecodeError as e:
+            logging.warning("assess/generate JSON parse error (attempt %d): %s", attempt + 1, e)
+        except Exception as e:
+            logging.exception("assess/generate error (attempt %d): %s", attempt + 1, e)
+            if attempt == 0:
+                # Retry once with a simpler config
+                continue
+            msg = str(e)
+            lower = msg.lower()
+            if "429" in msg or "quota" in lower or "rate limit" in lower:
+                return jsonify({
+                    "error": "AI quota has been exceeded for interview prep. Please wait a minute and try again.",
+                    "questions": [],
+                }), 503
+            return jsonify({
+                "error": "Interview questions could not be generated. Please try again later.",
+                "questions": [],
+            }), 500
+
+    return jsonify({"error": "Failed to generate questions", "questions": []}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -20,7 +20,7 @@ export function TemplateClassic({ data }: Props) {
 
   return (
     <div
-      style={{ fontSize: 13, fontFamily: "'Open Sans', sans-serif", display: "flex", minHeight: 700, backgroundColor: "#ffffff" }}
+      style={{ fontSize: 13, fontFamily: "'Open Sans', sans-serif", display: "flex", minHeight: 700, backgroundColor: "#ffffff", padding: 24, boxSizing: "border-box" }}
     >
       {/* Left profile column */}
       <div style={{ width: "40%", backgroundColor: "#ffffff", padding: 32, color: "#1f2937" }}>

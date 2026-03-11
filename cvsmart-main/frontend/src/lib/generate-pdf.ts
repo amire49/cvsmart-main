@@ -17,6 +17,8 @@ export async function generatePdfFromElement(
     useCORS: true,
     logging: false,
     backgroundColor: "#ffffff",
+    scrollX: 0,
+    scrollY: 0,
   });
 
   const imgWidthPx = canvas.width;

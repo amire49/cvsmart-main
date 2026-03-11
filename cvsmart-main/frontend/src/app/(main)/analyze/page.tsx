@@ -381,7 +381,6 @@ export default function ResumeAnalyzer() {
     formData.append("jobDescription", jobDescription);
     // Do not set Content-Type: fetch will set multipart/form-data with the correct boundary
     const headers: Record<string, string> = {};
-    if (process.env.NEXT_PUBLIC_API_KEY) headers["X-API-KEY"] = process.env.NEXT_PUBLIC_API_KEY;
     try {
       const response = await fetch(`${API_BASE}/analyze`, { method: "POST", body: formData, headers });
       const data = await response.json().catch(() => ({}));
@@ -391,18 +390,6 @@ export default function ResumeAnalyzer() {
       }
       setAnalysis((data as { analysis: string }).analysis || "");
       setStructured((data as { structured?: StructuredAnalysis }).structured || null);
-      console.log({
-        analysis: data.analysis,
-        structured: data.structured,
-        response: response,
-        data: data,
-        headers: headers,
-        formData: formData,
-        apiBase: API_BASE,
-        apiKey: process.env.NEXT_PUBLIC_API_KEY,
-        error: (data as { error?: string }).error,
-      });
-      
       setActiveTab("overview");
       setProgress(100);
       toast.success(t("toastAnalysisComplete"));
@@ -448,8 +435,8 @@ export default function ResumeAnalyzer() {
     if (jobDescription.trim()) formData.append("jobDescription", jobDescription.trim());
     try {
       const response = await fetch(`${API_BASE}/jobs/recommend`, {
-        method: "POST", body: formData,
-        headers: process.env.NEXT_PUBLIC_API_KEY ? { "X-API-KEY": process.env.NEXT_PUBLIC_API_KEY } : undefined,
+        method: "POST",
+        body: formData,
       } as RequestInit);
       const data = await response.json();
       if (!response.ok) { toast.error(data.error || t("errorTryAgain")); return; }
@@ -466,7 +453,6 @@ export default function ResumeAnalyzer() {
     formData.append("jobDescription", jobDescription);
     if (analysis) formData.append("analysis", analysis);
     const headers: Record<string, string> = {};
-    if (process.env.NEXT_PUBLIC_API_KEY) headers["X-API-KEY"] = process.env.NEXT_PUBLIC_API_KEY;
     try {
       const response = await fetch(`${API_BASE}/cv/improve`, { method: "POST", body: formData, headers });
       if (!response.ok) {
@@ -498,7 +484,6 @@ export default function ResumeAnalyzer() {
     formData.append("jobDescription", jobDescription);
     if (analysis) formData.append("analysis", analysis);
     const headers: Record<string, string> = {};
-    if (process.env.NEXT_PUBLIC_API_KEY) headers["X-API-KEY"] = process.env.NEXT_PUBLIC_API_KEY;
     try {
       const response = await fetch(`${API_BASE}/cv/templates`, { method: "POST", body: formData, headers });
       const data = await response.json().catch(() => ({}));
@@ -555,7 +540,6 @@ export default function ResumeAnalyzer() {
     formData.append("jobDescription", jobDescription);
     if (file) formData.append("resume", file);
     const headers: Record<string, string> = {};
-    if (process.env.NEXT_PUBLIC_API_KEY) headers["X-API-KEY"] = process.env.NEXT_PUBLIC_API_KEY;
     try {
       const response = await fetch(`${API_BASE}/assess/generate`, { method: "POST", body: formData, headers });
       const data = await response.json();
@@ -574,7 +558,7 @@ export default function ResumeAnalyzer() {
   const s = structured;
 
   return (
-    <div className="app-page min-h-screen bg-background text-foreground overflow-hidden">
+    <div className="app-page min-h-screen bg-background text-foreground overflow-x-hidden">
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 right-0 w-1/3 h-1/3 bg-primary rounded-full filter blur-[150px] opacity-20" />
         <div className="absolute bottom-0 left-0 w-1/3 h-1/3 bg-success rounded-full filter blur-[150px] opacity-20" />

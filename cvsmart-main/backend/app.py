@@ -21,15 +21,22 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS")
+if allowed_origins:
+    origin_list = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+    CORS(app, resources={r"/*": {"origins": origin_list}})
+else:
+    CORS(app)
 
 # Initialize rate limiter
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 limiter = Limiter(
-    key_func=get_remote_address,  # renamed argument
-    default_limits=["100 per hour"]
+    key_func=get_remote_address,
+    default_limits=["100 per hour"],
+    storage_uri=os.getenv("RATELIMIT_STORAGE_URL", "memory://"),
 )
 limiter.init_app(app)
 
@@ -1231,8 +1238,7 @@ def cv_templates():
         logging.exception("cv/templates error: %s", e)
         if "429" in msg or "ResourceExhausted" in msg:
             return jsonify({'error': 'Gemini quota exceeded – please try again later.'}), 503
-        # Surface the underlying error to the client to make debugging easier.
-        return jsonify({'error': msg or 'Failed to generate CV structure'}), 500
+        return jsonify({'error': 'Failed to generate CV structure. Please try again later.'}), 500
 
     return jsonify({'sections': sections})
 

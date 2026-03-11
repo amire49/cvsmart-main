@@ -4,7 +4,6 @@
 import type React from "react";
 import { useState, useEffect, useRef } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { useRouter } from "next/navigation";
 import ProtectedRoute from "@/components/auth/protected-route";
 import {
   Card,
@@ -94,7 +93,6 @@ export default function ProfilePage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClientComponentClient();
-  const router = useRouter();
   useEffect(() => {
     async function loadUserProfile() {
       try {

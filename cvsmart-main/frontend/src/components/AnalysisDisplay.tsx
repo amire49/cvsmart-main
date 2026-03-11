@@ -1,22 +1,8 @@
 import React from "react";
-// Optional: Import icons if you want to use them (e.g., from react-icons)
-import {
-  FaCheckCircle,
-  FaTimesCircle,
-  FaExclamationCircle,
-  FaCalculator,
-  FaKey,
-  FaPen,
-  FaClipboardList,
-  FaUserTie,
-  FaBullseye,
-  FaChartLine,
-} from "react-icons/fa";
 
-// Helper type for structure (optional, but good practice)
 type AnalysisSection = {
   key: string;
-  element: JSX.Element;
+  element: React.ReactElement;
 };
 
 const AnalysisDisplay = ({ analysis }: { analysis: string | null }) => {
@@ -29,10 +15,10 @@ const AnalysisDisplay = ({ analysis }: { analysis: string | null }) => {
     );
   }
 
-  const renderAnalysis = (): JSX.Element[] => {
+  const renderAnalysis = (): React.ReactElement[] => {
     const lines = analysis.trim().split("\n");
     const sections: AnalysisSection[] = [];
-    let currentListItems: JSX.Element[] = [];
+    let currentListItems: React.ReactElement[] = [];
 
     const flushList = () => {
       if (currentListItems.length > 0) {

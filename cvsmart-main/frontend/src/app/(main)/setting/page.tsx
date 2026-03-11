@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import type React from "react";
@@ -300,7 +299,7 @@ function PasswordSettings() {
             Reset Password
           </h3>
           <p className="text-sm text-muted-foreground mb-4">
-            If you've forgotten your current password, we can send you a
+            If you&apos;ve forgotten your current password, we can send you a
             password reset link.
           </p>
           <Button

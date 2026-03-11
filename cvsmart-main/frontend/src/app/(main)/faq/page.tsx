@@ -73,7 +73,7 @@ export default function FAQPage() {
       question: "What kind of feedback will I receive?",
       answer: (
         <div className="space-y-4">
-          <p>You'll receive:</p>
+          <p>You&apos;ll receive:</p>
           <ul className="space-y-2">
             <li className="flex items-start">
               <div className="w-1.5 h-1.5 rounded-full bg-success mt-2 mr-2 flex-shrink-0"></div>
@@ -98,14 +98,14 @@ export default function FAQPage() {
     {
       question: "Do I need to provide a job description?",
       answer:
-        "Providing a job description recommended. It allows the system to tailor your resume more specifically to the job you're applying for.",
+        "Providing a job description recommended. It allows the system to tailor your resume more specifically to the job you&apos;re applying for.",
     },
     
     {
       question: "Who can use this platform?",
       answer: (
         <div className="space-y-4">
-          <p>Anyone looking to improve their resume! It's ideal for:</p>
+          <p>Anyone looking to improve their resume! It&apos;s ideal for:</p>
           <ul className="space-y-2">
             <li className="flex items-start">
               <div className="w-1.5 h-1.5 rounded-full bg-success mt-2 mr-2 flex-shrink-0"></div>
@@ -166,7 +166,7 @@ export default function FAQPage() {
     {
       question: "Will this guarantee me a job?",
       answer:
-        "No tool can guarantee a job. However, our system improves your resume's structure, relevance, and clarity, giving you a better chance to catch a recruiter's attention.",
+        "No tool can guarantee a job. However, our system improves your resume&apos;s structure, relevance, and clarity, giving you a better chance to catch a recruiter&apos;s attention.",
     },
   ]
 
@@ -272,7 +272,7 @@ export default function FAQPage() {
           <div className="relative z-10 py-12 px-8 md:px-12 text-center">
             <h2 className="text-2xl md:text-3xl font-bold mb-4 text-primary-foreground">Still have questions?</h2>
             <p className="text-primary-foreground/90 mb-8 max-w-2xl mx-auto">
-              If you couldn't find the answer to your question, feel free to reach out to our support team.
+              If you couldn&apos;t find the answer to your question, feel free to reach out to our support team.
             </p>
             <Button variant="secondary" className="bg-background text-foreground hover:bg-muted rounded-full px-8" asChild>
               <Link href="/contact">

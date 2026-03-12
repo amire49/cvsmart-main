@@ -9,7 +9,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus,
   Trash2,
-  Download,
   FileDown,
   FileText,
   Briefcase,
@@ -33,8 +32,6 @@ import {
 import { TemplateClassic } from "@/components/cv-templates/template-classic";
 import { TemplateModern } from "@/components/cv-templates/template-modern";
 import { TemplateMinimal } from "@/components/cv-templates/template-minimal";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000";
 
 interface ExperienceEntry {
   role: string;
@@ -128,7 +125,6 @@ export default function BuildCvPage() {
   const [education, setEducation] = useState<EducationEntry[]>([{ ...defaultEducation }]);
   const [skills, setSkills] = useState("");
   const [projects, setProjects] = useState<ProjectEntry[]>([{ ...defaultProject }]);
-  const [downloading, setDownloading] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
@@ -247,14 +243,6 @@ export default function BuildCvPage() {
   }));
   const parsedSkills = skills ? skills.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
-  const sections = {
-    summary,
-    experience: parsedExperience,
-    education: education.map((e) => ({ degree: e.degree, school: e.school, year: e.year })),
-    skills: parsedSkills,
-    projects: projects.map((p) => ({ title: p.title, description: p.description })),
-  };
-
   const previewData: CVData = {
     personal: { fullName, title, email, phone, location, website, linkedin, github },
     summary,
@@ -262,35 +250,6 @@ export default function BuildCvPage() {
     education: education.map((e) => ({ degree: e.degree, school: e.school, year: e.year })),
     skills: parsedSkills,
     projects: projects.map((p) => ({ title: p.title, description: p.description })),
-  };
-
-  const handleDownload = async () => {
-    setDownloading(true);
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    try {
-      const response = await fetch(`${API_BASE}/cv/build`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ templateId, sections }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        toast.error((data as { error?: string }).error || "Failed to build CV");
-        return;
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "my_cv.docx";
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("Download started");
-    } catch {
-      toast.error("Failed to build CV");
-    } finally {
-      setDownloading(false);
-    }
   };
 
   const handleDownloadPdf = async () => {
@@ -407,16 +366,6 @@ export default function BuildCvPage() {
             >
               {downloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               {downloadingPdf ? "Creating PDF…" : "PDF"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleDownload}
-              disabled={downloading}
-              className="rounded-full gap-2"
-            >
-              <Download className="h-4 w-4" />
-              {downloading ? "Building..." : "DOCX"}
             </Button>
           </div>
         </div>

@@ -23,7 +23,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import {
   TEMPLATE_MAP,

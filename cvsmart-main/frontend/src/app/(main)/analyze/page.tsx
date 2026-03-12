@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/Input";
 import {
   Upload,
   FileText,
@@ -14,7 +15,6 @@ import {
   Check,
   Briefcase,
   ExternalLink,
-  Download,
   RefreshCw,
   Search,
   Zap,
@@ -27,6 +27,12 @@ import {
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { Analytics } from "@vercel/analytics/next";
+import { exportElementToPdf } from "@/lib/pdf-export";
+import {
+  TEMPLATE_MAP,
+  type TemplateId,
+  type CVData,
+} from "@/components/cv-templates";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000";
 
@@ -75,6 +81,68 @@ const SECTION_ICONS: Record<string, React.ComponentType<{ className?: string; st
 function SectionIcon({ id, className, style }: { id: string; className?: string; style?: React.CSSProperties }) {
   const Icon = SECTION_ICONS[id] ?? FileText;
   return <Icon className={className} style={style} />;
+}
+
+function normalizeCvSectionsToDraft(raw: unknown): CVData | null {
+  if (!raw || typeof raw !== "object") return null;
+  const data = raw as Record<string, unknown>;
+  const personalRaw = data.personal;
+  const contactRaw = data.contact;
+
+  const personal =
+    personalRaw && typeof personalRaw === "object" ? (personalRaw as Record<string, unknown>) : {};
+  const contact =
+    contactRaw && typeof contactRaw === "object" ? (contactRaw as Record<string, unknown>) : {};
+
+  const s = (v: unknown, d = ""): string => (typeof v === "string" ? v : d);
+  const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+  const fullName = s(personal.fullName, s(data.name));
+  const title = s(personal.title, s(data.title));
+
+  const email = s(personal.email, s(contact.email));
+  const phone = s(personal.phone, s(contact.phone));
+  const location = s(personal.location, s(contact.location));
+  const website = s(personal.website, s(contact.website));
+
+  return {
+    personal: {
+      fullName,
+      title,
+      email,
+      phone,
+      location,
+      website,
+      linkedin: s(personal.linkedin),
+      github: s(personal.github),
+    },
+    summary: s(data.summary),
+    skills: arr(data.skills).map((x) => String(x).trim()).filter(Boolean),
+    experience: arr(data.experience).map((expRaw) => {
+      const exp = expRaw as Record<string, unknown>;
+      return {
+        role: s(exp.role),
+        company: s(exp.company),
+        dates: s(exp.dates),
+        bullets: arr(exp.bullets).map((b) => String(b).trim()).filter(Boolean),
+      };
+    }),
+    education: arr(data.education).map((eduRaw) => {
+      const edu = eduRaw as Record<string, unknown>;
+      return {
+        degree: s(edu.degree),
+        school: s(edu.school),
+        year: s(edu.year),
+      };
+    }),
+    projects: arr(data.projects).map((projRaw) => {
+      const p = projRaw as Record<string, unknown>;
+      return {
+        title: s(p.title),
+        description: s(p.description),
+      };
+    }),
+  };
 }
 
 /** When backend returns raw JSON as analysis (e.g. parsing failed), parse it into StructuredAnalysis for the UI */
@@ -329,7 +397,11 @@ export default function ResumeAnalyzer() {
   const [progress, setProgress] = useState(0);
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
-  const [downloadingCv, setDownloadingCv] = useState(false);
+  const [generatingCv, setGeneratingCv] = useState(false);
+  const [cvDraft, setCvDraft] = useState<CVData | null>(null);
+  const [cvTemplateId, setCvTemplateId] = useState<TemplateId>("classic");
+  const [downloadingCvPdf, setDownloadingCvPdf] = useState(false);
+  const cvPreviewRef = useRef<HTMLDivElement>(null);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, "A" | "B" | "C" | "D">>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
@@ -445,6 +517,7 @@ export default function ResumeAnalyzer() {
     setFile(null);
     setJobDescription("");
     setJobs([]);
+    setCvDraft(null);
     setQuizQuestions([]);
     setQuizAnswers({});
     setQuizSubmitted(false);
@@ -470,30 +543,56 @@ export default function ResumeAnalyzer() {
     } catch { toast.error(t("errorTryAgain")); } finally { setLoadingJobs(false); }
   };
 
-  const handleDownloadImprovedCv = async () => {
-    if (!file || !jobDescription.trim()) return;
-    setDownloadingCv(true);
+  const handleGenerateEditableCv = async () => {
+    if (!file || !jobDescription.trim()) {
+      toast.error(t("errorUploadAndJob"));
+      return;
+    }
+    setGeneratingCv(true);
+    setCvDraft(null);
     const formData = new FormData();
     formData.append("resume", file);
     formData.append("jobDescription", jobDescription);
     if (analysis) formData.append("analysis", analysis);
-    const headers: Record<string, string> = {};
     try {
-      const response = await fetch(`${API_BASE}/cv/improve`, { method: "POST", body: formData, headers });
+      const response = await fetch(`${API_BASE}/cv/templates`, { method: "POST", body: formData });
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
         toast.error((data as { error?: string }).error || t("errorTryAgain"));
         return;
       }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "improved_cv.docx";
-      a.click();
-      URL.revokeObjectURL(url);
+      const sections = (data as { sections?: unknown }).sections;
+      const normalized = normalizeCvSectionsToDraft(sections);
+      if (!normalized) {
+        toast.error(t("errorTryAgain"));
+        return;
+      }
+      setCvDraft(normalized);
+      toast.success("Editable CV generated");
+    } catch (err) {
+      console.error(err);
+      toast.error(t("errorTryAgain"));
+    } finally {
+      setGeneratingCv(false);
+    }
+  };
+
+  const handleDownloadCvPdf = async () => {
+    const el = cvPreviewRef.current;
+    if (!el) {
+      toast.error("Preview not ready");
+      return;
+    }
+    setDownloadingCvPdf(true);
+    try {
+      await exportElementToPdf({ element: el, filename: "improved_cv.pdf" });
       toast.success("Download started");
-    } catch { toast.error(t("errorTryAgain")); } finally { setDownloadingCv(false); }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to create PDF");
+    } finally {
+      setDownloadingCvPdf(false);
+    }
   };
 
   const handleStartAssessment = async () => {
@@ -522,6 +621,7 @@ export default function ResumeAnalyzer() {
     quizSubmitted && quizQuestions.length > 0 ? quizQuestions.filter((q, i) => quizAnswers[i] === q.correct).length : 0;
 
   const s = structured;
+  const CvPreviewComponent = TEMPLATE_MAP[cvTemplateId];
 
   return (
     <div className="app-page min-h-screen bg-background text-foreground overflow-x-hidden">
@@ -809,39 +909,101 @@ export default function ResumeAnalyzer() {
                 {/* ACTIONS */}
                 {activeTab === "actions" && (
                   <div className="space-y-6 animate-in fade-in duration-300">
-                    {/* Download CV section */}
-                    <div>
-                      <h3 className="text-xs tracking-widest uppercase text-muted-foreground mb-3">Download improved CV</h3>
-                      <div className="flex flex-wrap gap-3">
-                        <button
-                          onClick={handleDownloadImprovedCv}
-                          disabled={downloadingCv}
-                          className="inline-flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:border-success/50 disabled:opacity-60"
-                        >
-                          <div className="w-10 h-10 rounded-lg bg-success/15 border border-success/30 flex items-center justify-center shrink-0">
-                            <Download className="h-5 w-5 text-success" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-foreground">{downloadingCv ? tCommon("loading") : t("downloadImprovedCv")}</p>
-                            <p className="text-xs text-muted-foreground">DOCX format</p>
-                          </div>
-                        </button>
-                        {/* PDF download commented out - DOCX only for now
-                        <button
-                          onClick={handleDownloadImprovedCvPdf}
-                          disabled={downloadingPdf}
-                          className="inline-flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:border-success/50 disabled:opacity-60"
-                        >
-                          <div className="w-10 h-10 rounded-lg bg-success/15 border border-success/30 flex items-center justify-center shrink-0">
-                            <FileDown className="h-5 w-5 text-success" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-foreground">{downloadingPdf ? tCommon("loading") : "Download PDF"}</p>
-                            <p className="text-xs text-muted-foreground">PDF format</p>
-                          </div>
-                        </button>
-                        */}
+                    {/* Editable CV builder */}
+                    <div className="rounded-2xl border border-border bg-card/60 backdrop-blur-sm p-6 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                          <h3 className="text-xs tracking-widest uppercase text-muted-foreground">Editable improved CV</h3>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Generate a structured CV, edit it, preview templates, then download PDF.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={handleGenerateEditableCv}
+                            disabled={generatingCv || !file || !jobDescription.trim()}
+                            className="rounded-full"
+                          >
+                            {generatingCv ? tCommon("loading") : "Generate editable CV"}
+                          </Button>
+                          <Button
+                            onClick={handleDownloadCvPdf}
+                            disabled={!cvDraft || downloadingCvPdf}
+                            className="rounded-full"
+                          >
+                            {downloadingCvPdf ? "Creating PDF…" : "Download PDF"}
+                          </Button>
+                        </div>
                       </div>
+
+                      {!cvDraft ? (
+                        <p className="text-sm text-muted-foreground">
+                          Click “Generate editable CV” to create a draft from your uploaded resume and job description.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-5">
+                          {/* Left: editor */}
+                          <div className="rounded-xl border border-border bg-background/40 p-4 space-y-4 max-h-[640px] overflow-auto">
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Template</p>
+                              <div className="flex gap-2">
+                                {(["classic", "modern", "minimal"] as const).map((id) => (
+                                  <button
+                                    key={id}
+                                    type="button"
+                                    onClick={() => setCvTemplateId(id)}
+                                    className={`px-3 py-2 rounded-lg text-sm border transition-colors ${
+                                      cvTemplateId === id ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                                    }`}
+                                  >
+                                    {id.charAt(0).toUpperCase() + id.slice(1)}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="space-y-3">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Personal</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <Input value={cvDraft.personal.fullName} onChange={(e) => setCvDraft((p) => p ? ({ ...p, personal: { ...p.personal, fullName: e.target.value } }) : p)} placeholder="Full name" />
+                                <Input value={cvDraft.personal.title} onChange={(e) => setCvDraft((p) => p ? ({ ...p, personal: { ...p.personal, title: e.target.value } }) : p)} placeholder="Title" />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <Input value={cvDraft.personal.email} onChange={(e) => setCvDraft((p) => p ? ({ ...p, personal: { ...p.personal, email: e.target.value } }) : p)} placeholder="Email" />
+                                <Input value={cvDraft.personal.phone} onChange={(e) => setCvDraft((p) => p ? ({ ...p, personal: { ...p.personal, phone: e.target.value } }) : p)} placeholder="Phone" />
+                              </div>
+                              <Input value={cvDraft.personal.location} onChange={(e) => setCvDraft((p) => p ? ({ ...p, personal: { ...p.personal, location: e.target.value } }) : p)} placeholder="Location" />
+                              <div className="grid grid-cols-2 gap-2">
+                                <Input value={cvDraft.personal.website} onChange={(e) => setCvDraft((p) => p ? ({ ...p, personal: { ...p.personal, website: e.target.value } }) : p)} placeholder="Website" />
+                                <Input value={cvDraft.personal.linkedin} onChange={(e) => setCvDraft((p) => p ? ({ ...p, personal: { ...p.personal, linkedin: e.target.value } }) : p)} placeholder="LinkedIn" />
+                              </div>
+                              <Input value={cvDraft.personal.github} onChange={(e) => setCvDraft((p) => p ? ({ ...p, personal: { ...p.personal, github: e.target.value } }) : p)} placeholder="GitHub" />
+                            </div>
+
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Summary</p>
+                              <Textarea value={cvDraft.summary} onChange={(e) => setCvDraft((p) => p ? ({ ...p, summary: e.target.value }) : p)} className="min-h-[90px]" />
+                            </div>
+
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Skills</p>
+                              <Input
+                                value={cvDraft.skills.join(", ")}
+                                onChange={(e) => setCvDraft((p) => p ? ({ ...p, skills: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) }) : p)}
+                                placeholder="React, Python, Node.js, ..."
+                              />
+                            </div>
+                          </div>
+
+                          {/* Right: preview */}
+                          <div className="rounded-xl border border-border bg-muted/30 p-6 overflow-auto flex justify-center">
+                            <div ref={cvPreviewRef} className="bg-white" style={{ width: 680, minHeight: 960 }}>
+                              <CvPreviewComponent data={cvDraft} />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Job search & Interview prep - side by side */}
@@ -914,14 +1076,6 @@ export default function ResumeAnalyzer() {
                   </CardContent>
                 </Card>
                 <div className="flex flex-wrap justify-end gap-3 mt-6">
-                  <Button onClick={handleDownloadImprovedCv} disabled={downloadingCv} className="rounded-full px-8 py-3 h-auto text-base font-medium">
-                    {downloadingCv ? tCommon("loading") : t("downloadImprovedCv")}
-                  </Button>
-                  {/* PDF download commented out - DOCX only for now
-                  <Button onClick={handleDownloadImprovedCvPdf} disabled={downloadingPdf} className="rounded-full px-8 py-3 h-auto text-base font-medium">
-                    {downloadingPdf ? tCommon("loading") : "Download PDF"}
-                  </Button>
-                  */}
                   <Button variant="outline" onClick={handleStartOver} className="rounded-full px-8 py-3 h-auto text-base font-medium">
                     {t("startOver")}
                   </Button>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus,
   Trash2,
-  Download,
+  FileDown,
   FileText,
   Briefcase,
   GraduationCap,
@@ -22,6 +22,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { exportElementToPdf } from "@/lib/pdf-export";
 import {
   TEMPLATE_MAP,
   type TemplateId,
@@ -30,8 +31,6 @@ import {
 import { TemplateClassic } from "@/components/cv-templates/template-classic";
 import { TemplateModern } from "@/components/cv-templates/template-modern";
 import { TemplateMinimal } from "@/components/cv-templates/template-minimal";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000";
 
 interface ExperienceEntry {
   role: string;
@@ -125,7 +124,8 @@ export default function BuildCvPage() {
   const [education, setEducation] = useState<EducationEntry[]>([{ ...defaultEducation }]);
   const [skills, setSkills] = useState("");
   const [projects, setProjects] = useState<ProjectEntry[]>([{ ...defaultProject }]);
-  const [downloading, setDownloading] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     personal: true,
     summary: true,
@@ -242,14 +242,6 @@ export default function BuildCvPage() {
   }));
   const parsedSkills = skills ? skills.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
-  const sections = {
-    summary,
-    experience: parsedExperience,
-    education: education.map((e) => ({ degree: e.degree, school: e.school, year: e.year })),
-    skills: parsedSkills,
-    projects: projects.map((p) => ({ title: p.title, description: p.description })),
-  };
-
   const previewData: CVData = {
     personal: { fullName, title, email, phone, location, website, linkedin, github },
     summary,
@@ -259,32 +251,21 @@ export default function BuildCvPage() {
     projects: projects.map((p) => ({ title: p.title, description: p.description })),
   };
 
-  const handleDownload = async () => {
-    setDownloading(true);
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const handleDownloadPdf = async () => {
+    const container = previewContainerRef.current;
+    if (!container) {
+      toast.error("Preview not ready");
+      return;
+    }
+    setDownloadingPdf(true);
     try {
-      const response = await fetch(`${API_BASE}/cv/build`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ templateId, sections }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        toast.error((data as { error?: string }).error || "Failed to build CV");
-        return;
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "my_cv.docx";
-      a.click();
-      URL.revokeObjectURL(url);
+      await exportElementToPdf({ element: container, filename: "my_cv.pdf" });
       toast.success("Download started");
-    } catch {
-      toast.error("Failed to build CV");
+    } catch (err) {
+      console.error("PDF export error:", err);
+      toast.error("Failed to create PDF");
     } finally {
-      setDownloading(false);
+      setDownloadingPdf(false);
     }
   };
 
@@ -326,7 +307,6 @@ export default function BuildCvPage() {
         <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-2" style={{ flexShrink: 0 }}>
           <h1 className="text-lg font-bold">{t("buildCv")}</h1>
           <div className="flex items-center gap-2">
-            {/* PDF download commented out - DOCX only for now
             <Button
               size="sm"
               onClick={handleDownloadPdf}
@@ -334,18 +314,7 @@ export default function BuildCvPage() {
               className="rounded-full gap-2"
             >
               {downloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              {downloadingPdf ? "Creating PDF..." : "PDF"}
-            </Button>
-            */}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleDownload}
-              disabled={downloading}
-              className="rounded-full gap-2"
-            >
-              <Download className="h-4 w-4" />
-              {downloading ? "Building..." : "DOCX"}
+              {downloadingPdf ? "Creating PDF…" : "PDF"}
             </Button>
           </div>
         </div>
@@ -534,6 +503,7 @@ export default function BuildCvPage() {
         }}
       >
         <div
+          ref={previewContainerRef}
           style={{
             width: 680,
             minHeight: 960,

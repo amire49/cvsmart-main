@@ -22,8 +22,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import html2canvas from "html2canvas-pro";
-import { jsPDF } from "jspdf";
+import { exportElementToPdf } from "@/lib/pdf-export";
 import {
   TEMPLATE_MAP,
   type TemplateId,
@@ -260,58 +259,8 @@ export default function BuildCvPage() {
     }
     setDownloadingPdf(true);
     try {
-      if (typeof document !== "undefined" && document.fonts?.ready) {
-        await document.fonts.ready;
-      }
-      const scale = 2;
-      const canvas = await html2canvas(container, {
-        scale,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-        width: container.offsetWidth,
-        height: container.offsetHeight,
-      });
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pdfPageWidth = pdf.internal.pageSize.getWidth();
-      const pdfPageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 0;
-      const contentWidth = pdfPageWidth - 2 * margin;
-      const contentHeight = pdfPageHeight - 2 * margin;
-      const fitScale = contentWidth / imgWidth;
-      const scaledWidth = contentWidth;
-      const scaledHeight = imgHeight * fitScale;
-      if (scaledHeight <= contentHeight) {
-        const dataUrl = canvas.toDataURL("image/png", 1.0);
-        pdf.addImage(dataUrl, "PNG", margin, margin, scaledWidth, scaledHeight);
-      } else {
-        const sliceHeightPx = contentHeight / fitScale;
-        let sourceY = 0;
-        while (sourceY < imgHeight) {
-          const sliceH = Math.min(sliceHeightPx, imgHeight - sourceY);
-          const sliceCanvas = document.createElement("canvas");
-          sliceCanvas.width = imgWidth;
-          sliceCanvas.height = Math.ceil(sliceH);
-          const ctx = sliceCanvas.getContext("2d");
-          if (!ctx) {
-            toast.error("Failed to create PDF");
-            return;
-          }
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, imgWidth, sliceCanvas.height);
-          ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceH, 0, 0, imgWidth, sliceH);
-          const sliceDataUrl = sliceCanvas.toDataURL("image/png", 1.0);
-          const slicePdfHeight = sliceH * fitScale;
-          pdf.addPage();
-          pdf.addImage(sliceDataUrl, "PNG", margin, margin, scaledWidth, slicePdfHeight);
-          sourceY += sliceH;
-        }
-        pdf.deletePage(1);
-      }
-      pdf.save("my_cv.pdf");
-      toast.success("PDF downloaded");
+      await exportElementToPdf({ element: container, filename: "my_cv.pdf" });
+      toast.success("Download started");
     } catch (err) {
       console.error("PDF export error:", err);
       toast.error("Failed to create PDF");

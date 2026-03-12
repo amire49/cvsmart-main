@@ -346,8 +346,7 @@ def generate_structured_cv_sections(resume_text, job_description, analysis_text=
         prompt_parts.append("\n\nFeedback to incorporate:\n")
         prompt_parts.append(analysis_text[:3000])
     prompt_parts.append(
-        "\n\nReturn ONLY a valid JSON object with keys: name, title, contact, summary, "
-        "skills, experience, education, projects, hobbies. No markdown fences."
+        "\n\nReturn ONLY a valid JSON object matching the schema described in the system instructions."
     )
     full_prompt = "".join(prompt_parts)
 
@@ -383,7 +382,8 @@ def generate_structured_cv_sections(resume_text, job_description, analysis_text=
     except Exception as e:
         logging.exception("generate_structured_cv_sections Gemini error: %s", e)
 
-    if not isinstance(data, dict) or not data or not data.get("name"):
+    # Accept either the new schema (personal/fullName) or older schema (name/contact) and normalize.
+    if not isinstance(data, dict) or not data:
         logging.info("Gemini JSON unusable, falling back to heuristic parsing")
         data = _parse_resume_heuristic(resume_text, job_description)
 
@@ -393,36 +393,47 @@ def generate_structured_cv_sections(resume_text, job_description, analysis_text=
     def _l(value):
         return value if isinstance(value, list) else []
 
-    contact = data.get("contact") or {}
-    if not isinstance(contact, dict):
-        contact = {}
+    personal = data.get("personal") if isinstance(data.get("personal"), dict) else {}
+    contact = data.get("contact") if isinstance(data.get("contact"), dict) else {}
+
+    full_name = _s(personal.get("fullName")) or _s(data.get("name"))
+    title = _s(personal.get("title")) or _s(data.get("title"))
+    email = _s(personal.get("email")) or _s(contact.get("email"))
+    phone = _s(personal.get("phone")) or _s(contact.get("phone"))
+    location = _s(personal.get("location")) or _s(contact.get("location"))
+    website = _s(personal.get("website")) or _s(contact.get("website"))
+    linkedin = _s(personal.get("linkedin"))
+    github = _s(personal.get("github"))
 
     normalized = {
-        "name": _s(data.get("name")),
-        "title": _s(data.get("title")),
-        "contact": {
-            "email": _s(contact.get("email")),
-            "phone": _s(contact.get("phone")),
-            "location": _s(contact.get("location")),
-            "website": _s(contact.get("website")),
+        "personal": {
+            "fullName": full_name,
+            "title": title,
+            "email": email,
+            "phone": phone,
+            "location": location,
+            "website": website,
+            "linkedin": linkedin,
+            "github": github,
         },
         "summary": _s(data.get("summary")),
-        "skills": [str(s).strip() for s in _l(data.get("skills")) if str(s).strip()],
+        "skills": [str(s).strip() for s in _l(data.get("skills")) if str(s).strip()][:40],
         "experience": [],
         "education": [],
         "projects": [],
-        "hobbies": [str(h).strip() for h in _l(data.get("hobbies")) if str(h).strip()],
     }
 
     for exp in _l(data.get("experience")):
         if not isinstance(exp, dict):
             continue
+        bullets = _l(exp.get("bullets"))
+        if isinstance(exp.get("bullets"), str):
+            bullets = [b.strip() for b in str(exp.get("bullets")).split("\n") if b.strip()]
         normalized["experience"].append({
             "role": _s(exp.get("role")),
             "company": _s(exp.get("company")),
-            "location": _s(exp.get("location")),
             "dates": _s(exp.get("dates")),
-            "bullets": [str(b).strip() for b in _l(exp.get("bullets")) if str(b).strip()],
+            "bullets": [str(b).strip() for b in bullets if str(b).strip()][:8],
         })
 
     for edu in _l(data.get("education")):
@@ -782,12 +793,29 @@ model_improve = genai.GenerativeModel(
 CV_JSON_SYSTEM = (
     "You are an expert resume writer. You ONLY output valid JSON. "
     "No markdown, no code fences, no explanation, no trailing commas. "
-    "Given a resume and job description, return a single JSON object with these exact keys: "
-    "name, title, contact (object with email/phone/location/website), summary, "
-    "skills (array of strings), experience (array of objects with role/company/location/dates/bullets), "
-    "education (array of objects with degree/school/year), "
-    "projects (array of objects with title/description), hobbies (array of strings). "
-    "Improve the content to match the job description. Do NOT invent facts."
+    "Given a resume and job description, return a single JSON object that matches this exact schema:\n"
+    "{\n"
+    "  \"personal\": {\n"
+    "    \"fullName\": \"\",\n"
+    "    \"title\": \"\",\n"
+    "    \"email\": \"\",\n"
+    "    \"phone\": \"\",\n"
+    "    \"location\": \"\",\n"
+    "    \"website\": \"\",\n"
+    "    \"linkedin\": \"\",\n"
+    "    \"github\": \"\"\n"
+    "  },\n"
+    "  \"summary\": \"\",\n"
+    "  \"experience\": [{\"role\":\"\",\"company\":\"\",\"dates\":\"\",\"bullets\":[\"\"]}],\n"
+    "  \"education\": [{\"degree\":\"\",\"school\":\"\",\"year\":\"\"}],\n"
+    "  \"skills\": [\"\"],\n"
+    "  \"projects\": [{\"title\":\"\",\"description\":\"\"}]\n"
+    "}\n"
+    "Rules:\n"
+    "- Do NOT invent facts. If unknown, use empty string.\n"
+    "- Bullets must be concise and impact-focused.\n"
+    "- Improve wording to match the job description while staying truthful.\n"
+    "- Output ONLY the JSON object."
 )
 
 model_cv_json = genai.GenerativeModel(

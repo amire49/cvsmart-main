@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import {
   Plus,
   Trash2,
   Download,
+  FileDown,
   FileText,
   Briefcase,
   GraduationCap,
@@ -22,6 +23,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import {
   TEMPLATE_MAP,
   type TemplateId,
@@ -126,6 +129,8 @@ export default function BuildCvPage() {
   const [skills, setSkills] = useState("");
   const [projects, setProjects] = useState<ProjectEntry[]>([{ ...defaultProject }]);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     personal: true,
     summary: true,
@@ -288,6 +293,74 @@ export default function BuildCvPage() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    const container = previewContainerRef.current;
+    if (!container) {
+      toast.error("Preview not ready");
+      return;
+    }
+    setDownloadingPdf(true);
+    try {
+      if (typeof document !== "undefined" && document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+      const scale = 2;
+      const canvas = await html2canvas(container, {
+        scale,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        width: container.offsetWidth,
+        height: container.offsetHeight,
+      });
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pdfPageWidth = pdf.internal.pageSize.getWidth();
+      const pdfPageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 0;
+      const contentWidth = pdfPageWidth - 2 * margin;
+      const contentHeight = pdfPageHeight - 2 * margin;
+      const fitScale = contentWidth / imgWidth;
+      const scaledWidth = contentWidth;
+      const scaledHeight = imgHeight * fitScale;
+      if (scaledHeight <= contentHeight) {
+        const dataUrl = canvas.toDataURL("image/png", 1.0);
+        pdf.addImage(dataUrl, "PNG", margin, margin, scaledWidth, scaledHeight);
+      } else {
+        const sliceHeightPx = contentHeight / fitScale;
+        let sourceY = 0;
+        while (sourceY < imgHeight) {
+          const sliceH = Math.min(sliceHeightPx, imgHeight - sourceY);
+          const sliceCanvas = document.createElement("canvas");
+          sliceCanvas.width = imgWidth;
+          sliceCanvas.height = Math.ceil(sliceH);
+          const ctx = sliceCanvas.getContext("2d");
+          if (!ctx) {
+            toast.error("Failed to create PDF");
+            return;
+          }
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, imgWidth, sliceCanvas.height);
+          ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceH, 0, 0, imgWidth, sliceH);
+          const sliceDataUrl = sliceCanvas.toDataURL("image/png", 1.0);
+          const slicePdfHeight = sliceH * fitScale;
+          pdf.addPage();
+          pdf.addImage(sliceDataUrl, "PNG", margin, margin, scaledWidth, slicePdfHeight);
+          sourceY += sliceH;
+        }
+        pdf.deletePage(1);
+      }
+      pdf.save("my_cv.pdf");
+      toast.success("PDF downloaded");
+    } catch (err) {
+      console.error("PDF export error:", err);
+      toast.error("Failed to create PDF");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   // PDF download is disabled in this version; DOCX export is the primary path.
 
   const PreviewComponent = TEMPLATE_MAP[templateId];
@@ -326,7 +399,6 @@ export default function BuildCvPage() {
         <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-2" style={{ flexShrink: 0 }}>
           <h1 className="text-lg font-bold">{t("buildCv")}</h1>
           <div className="flex items-center gap-2">
-            {/* PDF download commented out - DOCX only for now
             <Button
               size="sm"
               onClick={handleDownloadPdf}
@@ -334,9 +406,8 @@ export default function BuildCvPage() {
               className="rounded-full gap-2"
             >
               {downloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              {downloadingPdf ? "Creating PDF..." : "PDF"}
+              {downloadingPdf ? "Creating PDF…" : "PDF"}
             </Button>
-            */}
             <Button
               size="sm"
               variant="outline"
@@ -534,6 +605,7 @@ export default function BuildCvPage() {
         }}
       >
         <div
+          ref={previewContainerRef}
           style={{
             width: 680,
             minHeight: 960,

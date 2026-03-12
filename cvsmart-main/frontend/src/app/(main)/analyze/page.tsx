@@ -83,6 +83,68 @@ function SectionIcon({ id, className, style }: { id: string; className?: string;
   return <Icon className={className} style={style} />;
 }
 
+function normalizeCvSectionsToDraft(raw: unknown): CVData | null {
+  if (!raw || typeof raw !== "object") return null;
+  const data = raw as Record<string, unknown>;
+  const personalRaw = data.personal;
+  const contactRaw = data.contact;
+
+  const personal =
+    personalRaw && typeof personalRaw === "object" ? (personalRaw as Record<string, unknown>) : {};
+  const contact =
+    contactRaw && typeof contactRaw === "object" ? (contactRaw as Record<string, unknown>) : {};
+
+  const s = (v: unknown, d = ""): string => (typeof v === "string" ? v : d);
+  const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+  const fullName = s(personal.fullName, s(data.name));
+  const title = s(personal.title, s(data.title));
+
+  const email = s(personal.email, s(contact.email));
+  const phone = s(personal.phone, s(contact.phone));
+  const location = s(personal.location, s(contact.location));
+  const website = s(personal.website, s(contact.website));
+
+  return {
+    personal: {
+      fullName,
+      title,
+      email,
+      phone,
+      location,
+      website,
+      linkedin: s(personal.linkedin),
+      github: s(personal.github),
+    },
+    summary: s(data.summary),
+    skills: arr(data.skills).map((x) => String(x).trim()).filter(Boolean),
+    experience: arr(data.experience).map((expRaw) => {
+      const exp = expRaw as Record<string, unknown>;
+      return {
+        role: s(exp.role),
+        company: s(exp.company),
+        dates: s(exp.dates),
+        bullets: arr(exp.bullets).map((b) => String(b).trim()).filter(Boolean),
+      };
+    }),
+    education: arr(data.education).map((eduRaw) => {
+      const edu = eduRaw as Record<string, unknown>;
+      return {
+        degree: s(edu.degree),
+        school: s(edu.school),
+        year: s(edu.year),
+      };
+    }),
+    projects: arr(data.projects).map((projRaw) => {
+      const p = projRaw as Record<string, unknown>;
+      return {
+        title: s(p.title),
+        description: s(p.description),
+      };
+    }),
+  };
+}
+
 /** When backend returns raw JSON as analysis (e.g. parsing failed), parse it into StructuredAnalysis for the UI */
 function parseStructuredFromAnalysis(analysis: string): StructuredAnalysis | null {
   const raw = analysis.trim();
@@ -499,12 +561,13 @@ export default function ResumeAnalyzer() {
         toast.error((data as { error?: string }).error || t("errorTryAgain"));
         return;
       }
-      const sections = (data as { sections?: CVData }).sections;
-      if (!sections) {
+      const sections = (data as { sections?: unknown }).sections;
+      const normalized = normalizeCvSectionsToDraft(sections);
+      if (!normalized) {
         toast.error(t("errorTryAgain"));
         return;
       }
-      setCvDraft(sections);
+      setCvDraft(normalized);
       toast.success("Editable CV generated");
     } catch (err) {
       console.error(err);

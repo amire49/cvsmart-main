@@ -8,7 +8,9 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
+/build/
+cvsmart-main/backend/myenv/
+**/myenv/
 develop-eggs/
 dist/
 downloads/

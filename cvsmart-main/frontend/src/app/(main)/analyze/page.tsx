@@ -390,8 +390,11 @@ export default function ResumeAnalyzer() {
     formData.append("jobDescription", jobDescription);
     // Do not set Content-Type: fetch will set multipart/form-data with the correct boundary
     const headers: Record<string, string> = {};
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 125000); // 125s to match backend timeout
     try {
-      const response = await fetch(`${API_BASE}/analyze`, { method: "POST", body: formData, headers });
+      const response = await fetch(`${API_BASE}/analyze`, { method: "POST", body: formData, headers, signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         toast.error((data as { error?: string }).error || t("errorTryAgain"));
@@ -413,9 +416,15 @@ export default function ResumeAnalyzer() {
       setProgress(100);
       toast.success(t("toastAnalysisComplete"));
     } catch (err) {
+      clearTimeout(timeoutId);
       console.error("Error during analysis:", err);
-      toast.error("Cannot reach the server. Is the backend running at " + API_BASE + "?");
+      if (err instanceof Error && err.name === "AbortError") {
+        toast.error("Analysis is taking longer than expected. Please try again.");
+      } else {
+        toast.error("Cannot reach the server. Is the backend running at " + API_BASE + "?");
+      }
     } finally {
+      clearTimeout(timeoutId);
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;

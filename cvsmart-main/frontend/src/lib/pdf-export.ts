@@ -14,7 +14,7 @@ export async function exportElementToPdf({
   filename = "cv.pdf",
   format = "a4",
   scale = 2,
-  marginMm = 0,
+  marginMm = 10,
 }: ExportPdfOptions) {
   if (typeof document !== "undefined" && document.fonts?.ready) {
     await document.fonts.ready;

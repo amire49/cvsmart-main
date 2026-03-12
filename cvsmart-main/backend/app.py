@@ -417,7 +417,7 @@ def generate_structured_cv_sections(resume_text, job_description, analysis_text=
             "github": github,
         },
         "summary": _s(data.get("summary")),
-        "skills": [str(s).strip() for s in _l(data.get("skills")) if str(s).strip()][:40],
+        "skills": [str(s).strip() for s in _l(data.get("skills")) if str(s).strip()][:15],
         "experience": [],
         "education": [],
         "projects": [],
@@ -452,6 +452,11 @@ def generate_structured_cv_sections(resume_text, job_description, analysis_text=
             "title": _s(proj.get("title")),
             "description": _s(proj.get("description")),
         })
+
+    # Hard caps to keep the CV within 1–2 pages.
+    normalized["experience"] = normalized["experience"][:4]
+    normalized["education"] = normalized["education"][:2]
+    normalized["projects"] = normalized["projects"][:3]
 
     return normalized
 
@@ -813,7 +818,13 @@ CV_JSON_SYSTEM = (
     "}\n"
     "Rules:\n"
     "- Do NOT invent facts. If unknown, use empty string.\n"
-    "- Bullets must be concise and impact-focused.\n"
+    "- Aim for a professional resume that comfortably fits on 1–2 A4 pages when rendered.\n"
+    "- SUMMARY: 3–5 concise sentences focused on role and impact.\n"
+    "- EXPERIENCE: at most 4 roles. For each role, include 3–5 short, impact-focused bullets.\n"
+    "- EDUCATION: at most 2 entries.\n"
+    "- SKILLS: 10–15 distinct skills, grouped logically if helpful.\n"
+    "- PROJECTS: at most 3 projects; each description 2–3 short sentences.\n"
+    "- Bullets must be concise, action-oriented, and avoid repetition.\n"
     "- Improve wording to match the job description while staying truthful.\n"
     "- Output ONLY the JSON object."
 )

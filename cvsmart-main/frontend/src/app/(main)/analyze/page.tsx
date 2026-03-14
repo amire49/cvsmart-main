@@ -420,22 +420,50 @@ export default function ResumeAnalyzer() {
   const loadingOnStep3 = currentStep === 3 && loading && !structured;
   const stepLabels: [string, string, string] = [t("stepUpload"), t("stepJobDesc"), t("stepResults")];
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const selectedFile = e.target.files[0];
-      const fileSizeMB = selectedFile.size / (1024 * 1024);
-      if (fileSizeMB > MAX_FILE_SIZE_MB) {
-        toast.error(t("errorMaxSize", { max: MAX_FILE_SIZE_MB }));
-        setFile(null);
-      } else if (
-        !["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(selectedFile.type)
-      ) {
-        toast.error(t("errorFileType"));
-        setFile(null);
-      } else {
-        setFile(selectedFile);
-      }
+  const acceptTypes = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+  const acceptExtensions = [".pdf", ".docx"];
+
+  const setFileIfValid = (selectedFile: File) => {
+    const fileSizeMB = selectedFile.size / (1024 * 1024);
+    if (fileSizeMB > MAX_FILE_SIZE_MB) {
+      toast.error(t("errorMaxSize", { max: MAX_FILE_SIZE_MB }));
+      setFile(null);
+      return;
     }
+    const ext = selectedFile.name.toLowerCase().slice(selectedFile.name.lastIndexOf("."));
+    const typeOk = acceptTypes.includes(selectedFile.type) || acceptExtensions.includes(ext);
+    if (!typeOk) {
+      toast.error(t("errorFileType"));
+      setFile(null);
+      return;
+    }
+    setFile(selectedFile);
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) setFileIfValid(e.target.files[0]);
+  };
+
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const dropped = e.dataTransfer?.files;
+    if (dropped && dropped.length > 0) setFileIfValid(dropped[0]);
   };
 
   const handleAnalyze = async () => {
@@ -669,15 +697,34 @@ export default function ResumeAnalyzer() {
                 <CardTitle className="text-xl font-semibold">{t("uploadResume")}</CardTitle>
               </CardHeader>
               <CardContent className="p-6">
-                <label className="flex flex-col items-center justify-center w-full h-48 border border-dashed border-border rounded-xl cursor-pointer bg-muted hover:bg-accent transition-all duration-300">
-                  <div className="flex flex-col items-center pt-5 pb-6">
-                    {file ? (
+                <label
+                  className={`flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${
+                    isDragging
+                      ? "border-primary bg-primary/10 scale-[1.02]"
+                      : file
+                        ? "border-border bg-muted hover:bg-accent"
+                        : "border-border bg-muted hover:bg-accent hover:border-primary/50"
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  <div className="flex flex-col items-center pt-5 pb-6 pointer-events-none">
+                    {file && !isDragging ? (
                       <>
                         <div className="w-16 h-16 bg-success rounded-full flex items-center justify-center mb-4">
                           <FileText className="w-8 h-8 text-primary-foreground" />
                         </div>
                         <p className="mb-2 text-sm"><span className="font-medium text-foreground">{file.name}</span></p>
                         <p className="text-xs text-muted-foreground">{t("clickToChange")}</p>
+                      </>
+                    ) : isDragging ? (
+                      <>
+                        <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-4 border-2 border-primary">
+                          <Upload className="w-8 h-8 text-primary" />
+                        </div>
+                        <p className="mb-2 text-sm font-medium text-foreground">{t("dropHere")}</p>
+                        <p className="text-xs text-muted-foreground">{t("pdfOrDocx")}</p>
                       </>
                     ) : (
                       <>

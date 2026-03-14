@@ -154,7 +154,12 @@ function parseStructuredFromAnalysis(analysis: string): StructuredAnalysis | nul
     const fixed = raw.replace(/,\s*([}\]])/g, "$1");
     data = JSON.parse(fixed) as Record<string, unknown>;
   } catch {
-    return null;
+    try {
+      const controlCleaned = raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+      data = JSON.parse(controlCleaned.replace(/,\s*([}\]])/g, "$1")) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
 
@@ -203,7 +208,7 @@ function parseStructuredFromAnalysis(analysis: string): StructuredAnalysis | nul
         score: techScore,
         color: "#00e5a0",
         icon: "⚡",
-        details: strengths.length ? strengths.slice(0, 4) : ["See full analysis"],
+        details: arr(data.technicalDetails).slice(0, 4).length ? arr(data.technicalDetails).slice(0, 4) : ["See full analysis"],
       },
       {
         id: "experience",
@@ -1066,12 +1071,12 @@ export default function ResumeAnalyzer() {
                 )}
               </>
             ) : analysis ? (
-              <div className="max-w-2xl mx-auto">
+              <div className="max-w-2xl mx-auto min-w-0">
                 <Card className="backdrop-blur-sm overflow-hidden">
                   <CardHeader className="border-b border-border">
                     <CardTitle className="text-xl font-semibold">{t("analysisResults")}</CardTitle>
                   </CardHeader>
-                  <CardContent className="p-6 prose prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground">
+                  <CardContent className="p-6 prose prose-invert max-w-none min-w-0 break-words prose-headings:text-foreground prose-p:text-foreground">
                     <AnalysisDisplay analysis={analysis} />
                   </CardContent>
                 </Card>
@@ -1181,6 +1186,8 @@ export default function ResumeAnalyzer() {
   );
 }
 
+const analysisContainerClass = "min-w-0 w-full break-words overflow-x-auto";
+
 function AnalysisDisplay({ analysis }: { analysis: string }) {
   const fg = "var(--foreground)";
   const accent = "var(--success)";
@@ -1193,7 +1200,12 @@ function AnalysisDisplay({ analysis }: { analysis: string }) {
       const fixed = trimmed.replace(/,\s*([}\]])/g, "$1");
       data = JSON.parse(fixed) as Record<string, unknown>;
     } catch {
-      data = undefined;
+      try {
+        const controlCleaned = trimmed.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+        data = JSON.parse(controlCleaned.replace(/,\s*([}\]])/g, "$1")) as Record<string, unknown>;
+      } catch {
+        data = undefined;
+      }
     }
     if (data && typeof data === "object" && !Array.isArray(data)) {
       const score = (v: unknown) => (typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : null);
@@ -1201,7 +1213,7 @@ function AnalysisDisplay({ analysis }: { analysis: string }) {
       const text = (v: unknown) => (v != null && String(v).trim() ? String(v).trim() : "");
 
       return (
-        <div className="space-y-6">
+        <div className={`space-y-6 ${analysisContainerClass}`}>
           {(score(data.ResumeMatchScore) ?? score(data.overallScore)) != null && (
             <div className="rounded-xl border border-border bg-card/40 p-4 text-center">
               <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Resume Match Score</p>
@@ -1251,6 +1263,23 @@ function AnalysisDisplay({ analysis }: { analysis: string }) {
     }
   }
 
+  // If content looks like unparseable JSON, show a short message instead of raw dump
+  if (trimmed.startsWith("{") && trimmed.length > 200) {
+    return (
+      <div className={analysisContainerClass}>
+        <p className="text-muted-foreground mb-3">
+          Analysis could not be formatted. Please run the analysis again.
+        </p>
+        <details className="rounded-lg border border-border bg-muted/30 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">Show raw response</summary>
+          <pre className="mt-2 text-xs overflow-x-auto break-words whitespace-pre-wrap min-w-0 max-w-full" style={{ wordBreak: "break-word" }}>
+            {analysis}
+          </pre>
+        </details>
+      </div>
+    );
+  }
+
   const processedAnalysis = analysis
     .replace(/^# (.*$)/gm, `<div class="text-2xl font-bold mb-4" style="color:${fg}">$1</div>`)
     .replace(/^## (.*$)/gm, `<div class="text-xl font-semibold mb-2" style="color:${fg}">$1</div>`)
@@ -1261,9 +1290,9 @@ function AnalysisDisplay({ analysis }: { analysis: string }) {
     .replace(/(✅|⚠️|❌|🌟|🔍|🛠️|📊|🔑|✏️|📁|🖋️|🎯)/g, '<span class="text-xl mr-1">$1</span>');
   const paragraphs = processedAnalysis.split("\n\n");
   return (
-    <div className="analysis-container">
+    <div className={`analysis-container ${analysisContainerClass}`}>
       {paragraphs.map((paragraph, index) => (
-        <div key={index} className="mb-4" dangerouslySetInnerHTML={{ __html: paragraph.replace(/\n/g, "<br/>") }} />
+        <div key={index} className="mb-4 break-words min-w-0" dangerouslySetInnerHTML={{ __html: paragraph.replace(/\n/g, "<br/>") }} />
       ))}
     </div>
   );

@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import ProtectedRoute from "@/components/auth/protected-route";
 import DashboardStats from "@/components/dashboard/dashboard-stats";
 import RecentActivity from "@/components/dashboard/recent-activity";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
 
 export default function DashboardPage() {
@@ -71,12 +73,9 @@ export default function DashboardPage() {
                     analyzing your first resume.
                   </p>
                   <div className="mt-4">
-                    <a
-                      href="/analyze"
-                      className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition"
-                    >
-                      Upload Resume
-                    </a>
+                    <Button asChild className="rounded-md">
+                      <Link href="/analyze">Upload Resume</Link>
+                    </Button>
                   </div>
                 </div>
               </TabsContent>
@@ -93,9 +92,12 @@ export default function DashboardPage() {
                     <p className="text-muted-foreground mb-2">
                       No applications tracked yet
                     </p>
-                    <button className="text-success hover:underline">
-                      + Add your first application
-                    </button>
+                    <p className="text-sm text-muted-foreground">
+                      Application tracking is coming soon.
+                    </p>
+                    <Button variant="outline" disabled className="mt-4 rounded-md opacity-70 cursor-not-allowed">
+                      Coming soon
+                    </Button>
                   </div>
                 </div>
               </TabsContent>

@@ -8,6 +8,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button } from "../ui/button";
 import { Label } from "../ui/Label";
 import { Input } from "../ui/Input";
+import { PasswordInput } from "../ui/password-input";
 
 const inputClass =
   "bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring rounded-xl h-11";
@@ -72,9 +73,8 @@ export default function SignupForm() {
         <Label htmlFor="signup-password" className="text-foreground">
           Password
         </Label>
-        <Input
+        <PasswordInput
           id="signup-password"
-          type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="At least 6 characters"
@@ -86,9 +86,8 @@ export default function SignupForm() {
         <Label htmlFor="signup-confirm" className="text-foreground">
           Confirm password
         </Label>
-        <Input
+        <PasswordInput
           id="signup-confirm"
-          type="password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           placeholder="Repeat your password"

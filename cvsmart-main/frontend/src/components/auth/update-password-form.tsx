@@ -7,7 +7,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter } from "next/navigation";
 import { Button } from "../ui/button";
 import { Label } from "../ui/Label";
-import { Input } from "../ui/Input";
+import { PasswordInput } from "../ui/password-input";
 import { Loader2 } from "lucide-react";
 
 const inputClass =
@@ -86,9 +86,8 @@ export default function UpdatePasswordForm() {
         <Label htmlFor="update-password" className="text-foreground">
           New password
         </Label>
-        <Input
+        <PasswordInput
           id="update-password"
-          type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="At least 6 characters"
@@ -100,9 +99,8 @@ export default function UpdatePasswordForm() {
         <Label htmlFor="update-confirm" className="text-foreground">
           Confirm new password
         </Label>
-        <Input
+        <PasswordInput
           id="update-confirm"
-          type="password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           placeholder="Repeat your password"

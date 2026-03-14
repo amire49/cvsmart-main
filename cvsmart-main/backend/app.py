@@ -691,10 +691,23 @@ def analyze_resume():
                 end = text.rfind("}")
                 if start != -1 and end != -1 and end > start:
                     text = text[start : end + 1]
+                # Try multiple parse strategies so we rarely return raw JSON
                 text_fixed = re.sub(r",\s*([}\]])", r"\1", text)
-                try:
-                    data = json.loads(text_fixed)
-                except json.JSONDecodeError:
+                data = None
+                for candidate in (text_fixed, text):
+                    try:
+                        data = json.loads(candidate)
+                        break
+                    except json.JSONDecodeError:
+                        continue
+                if data is None:
+                    # Remove control chars that can break JSON (keep \n \r \t)
+                    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text_fixed)
+                    try:
+                        data = json.loads(cleaned)
+                    except json.JSONDecodeError:
+                        pass
+                if data is None:
                     logging.warning("analyze: JSON parse failed, raw (500 chars): %s", text[:500])
 
             if isinstance(data, dict):

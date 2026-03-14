@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "../ui/button";
 import { Label } from "../ui/Label";
 import { Input } from "../ui/Input";
+import { PasswordInput } from "../ui/password-input";
 
 const inputClass =
   "bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-ring rounded-xl h-11";
@@ -74,8 +75,7 @@ export default function LoginForm() {
             Forgot password?
           </Link>
         </div>
-        <Input
-          type="password"
+        <PasswordInput
           id="login-password"
           value={password}
           placeholder="Enter your password"

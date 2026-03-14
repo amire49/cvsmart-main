@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/Label";
 import { toast } from "sonner";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -28,7 +29,7 @@ export default function SettingsPage() {
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1/2 h-1/2 bg-ring rounded-full filter blur-[150px] opacity-10" />
         </div>
 
-        <div className="container mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="container mx-auto max-w-4xl py-12 px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-4xl font-bold text-foreground">
               Account Settings
@@ -247,9 +248,8 @@ function PasswordSettings() {
             <Label htmlFor="current-password" className="text-foreground">
               Current Password
             </Label>
-            <Input
+            <PasswordInput
               id="current-password"
-              type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
@@ -261,9 +261,8 @@ function PasswordSettings() {
             <Label htmlFor="new-password" className="text-foreground">
               New Password
             </Label>
-            <Input
+            <PasswordInput
               id="new-password"
-              type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -275,9 +274,8 @@ function PasswordSettings() {
             <Label htmlFor="confirm-password" className="text-foreground">
               Confirm New Password
             </Label>
-            <Input
+            <PasswordInput
               id="confirm-password"
-              type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required

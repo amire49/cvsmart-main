@@ -70,6 +70,14 @@ type Experience = {
   description: string;
 };
 
+function oauthPictureFromUser(user: { user_metadata?: Record<string, unknown> } | null): string | null {
+  if (!user?.user_metadata) return null;
+  const m = user.user_metadata;
+  if (typeof m.picture === "string" && m.picture) return m.picture;
+  if (typeof m.avatar_url === "string" && m.avatar_url) return m.avatar_url;
+  return null;
+}
+
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Partial<Profile>>({
@@ -243,6 +251,9 @@ export default function ProfilePage() {
 
       if (updateError) throw updateError;
       setProfile({ ...profile, avatar_url: publicUrl });
+      window.dispatchEvent(
+        new CustomEvent("cvsmart:avatar-updated", { detail: { url: publicUrl } })
+      );
       toast.success("Your profile image has been updated successfully.");
     } catch (err: unknown) {
       const message =
@@ -277,6 +288,9 @@ export default function ProfilePage() {
 
       if (updateError) throw updateError;
       setProfile({ ...profile, avatar_url: null });
+      window.dispatchEvent(
+        new CustomEvent("cvsmart:avatar-updated", { detail: { url: null } })
+      );
       toast.success("Your profile image has been removed.");
     } catch (err: any) {
       toast.error(err.message || "There was a problem deleting your image.");
@@ -285,6 +299,9 @@ export default function ProfilePage() {
       setUploading(false);
     }
   };
+
+  const displayAvatarUrl =
+    profile.avatar_url ?? oauthPictureFromUser(user) ?? null;
 
   const calculateProfileCompleteness = () => {
     let total = 0;
@@ -300,7 +317,7 @@ export default function ProfilePage() {
       profile[field as keyof typeof profile]?.toString().trim()
     ).length;
     total += 1;
-    if (profile.avatar_url) completed += 1;
+    if (displayAvatarUrl) completed += 1;
     if (profile.skills && profile.skills.length > 0) completed += 1;
     if (profile.education && profile.education.length > 0) completed += 1;
     if (profile.experience && profile.experience.length > 0) completed += 1;
@@ -416,18 +433,18 @@ export default function ProfilePage() {
                     {/* Profile Image Section */}
                     <div className="relative mb-6">
                       <Avatar className="h-36 w-36 border-4 border-border rounded-full">
-                        {profile.avatar_url ? (
+                        {displayAvatarUrl ? (
                           <AvatarImage
-                            src={profile.avatar_url || "/placeholder.svg"}
+                            src={displayAvatarUrl}
                             alt={profile.full_name || "Profile"}
                             className="object-cover rounded-full"
+                            referrerPolicy="no-referrer"
                           />
-                        ) : (
-                          <AvatarFallback className="text-3xl bg-primary text-primary-foreground rounded-full">
-                            {profile.full_name?.substring(0, 2).toUpperCase() ||
-                              "?"}
-                          </AvatarFallback>
-                        )}
+                        ) : null}
+                        <AvatarFallback className="text-3xl bg-primary text-primary-foreground rounded-full">
+                          {profile.full_name?.substring(0, 2).toUpperCase() ||
+                            "?"}
+                        </AvatarFallback>
                       </Avatar>
 
                       {editMode && (

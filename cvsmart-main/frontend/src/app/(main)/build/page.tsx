@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import {
   Check,
   User,
   Loader2,
+  Eye,
+  PenLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportElementToPdf } from "@/lib/pdf-export";
@@ -125,7 +127,10 @@ export default function BuildCvPage() {
   const [skills, setSkills] = useState("");
   const [projects, setProjects] = useState<ProjectEntry[]>([{ ...defaultProject }]);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"form" | "preview">("form");
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const previewWrapperRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(1);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     personal: true,
     summary: true,
@@ -269,13 +274,31 @@ export default function BuildCvPage() {
     }
   };
 
-  // PDF download is disabled in this version; DOCX export is the primary path.
-
   const PreviewComponent = TEMPLATE_MAP[templateId];
+
+  const updatePreviewScale = useCallback(() => {
+    const wrapper = previewWrapperRef.current;
+    if (!wrapper) return;
+    const available = wrapper.clientWidth - 32;
+    const cvWidth = 680;
+    setPreviewScale(available < cvWidth ? available / cvWidth : 1);
+  }, []);
+
+  useEffect(() => {
+    updatePreviewScale();
+    window.addEventListener("resize", updatePreviewScale);
+    return () => window.removeEventListener("resize", updatePreviewScale);
+  }, [updatePreviewScale]);
+
+  useEffect(() => {
+    if (mobileTab === "preview") {
+      requestAnimationFrame(updatePreviewScale);
+    }
+  }, [mobileTab, updatePreviewScale]);
 
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "calc(100vh - 60px)" }}>
+      <div className="flex items-center justify-center" style={{ height: "calc(100vh - 60px)" }}>
         <div className="text-center space-y-3">
           <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
           <p className="text-sm text-muted-foreground">Loading your profile...</p>
@@ -284,238 +307,249 @@ export default function BuildCvPage() {
     );
   }
 
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "420px 1fr",
-        height: "calc(100vh - 60px)",
-        overflow: "hidden",
-      }}
-    >
-      {/* ========== LEFT PANEL — Form ========== */}
-      <div
-        style={{
-          borderRight: "1px solid var(--border)",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-        className="bg-background"
-      >
-        {/* Panel header */}
-        <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-2" style={{ flexShrink: 0 }}>
-          <h1 className="text-lg font-bold">{t("buildCv")}</h1>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={handleDownloadPdf}
-              disabled={downloadingPdf}
-              className="rounded-full gap-2"
-            >
-              {downloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              {downloadingPdf ? "Creating PDF…" : "PDF"}
-            </Button>
-          </div>
-        </div>
-
-        {/* Scrollable form */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          {/* Template picker */}
-          <div className="px-5 py-4 border-b border-border">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-              Template
-            </p>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-              {TEMPLATES.map((tpl) => {
-                const Comp = templateComponents[tpl.id];
-                const isActive = templateId === tpl.id;
-                return (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => setTemplateId(tpl.id)}
-                    style={{
-                      position: "relative",
-                      borderRadius: 8,
-                      border: isActive ? "2px solid var(--primary)" : "2px solid var(--border)",
-                      overflow: "hidden",
-                      textAlign: "left",
-                      cursor: "pointer",
-                      boxShadow: isActive ? "0 0 0 3px rgba(var(--primary), 0.15)" : "none",
-                      transition: "border-color 0.15s, box-shadow 0.15s",
-                    }}
-                  >
-                    <div style={{ height: 80, overflow: "hidden", position: "relative", background: "#f9fafb" }}>
-                      <div style={{ transform: "scale(0.16)", transformOrigin: "top left", width: "625%", height: "625%", pointerEvents: "none" }}>
-                        <Comp data={sampleData} />
-                      </div>
-                    </div>
-                    <div className="bg-background border-t border-border" style={{ padding: "4px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: 11, fontWeight: 500 }}>{tpl.name}</span>
-                      {isActive && (
-                        <div className="bg-primary" style={{ width: 16, height: 16, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <Check className="text-primary-foreground" style={{ width: 10, height: 10 }} />
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Form sections */}
-          <div className="divide-y divide-border">
-            {/* Personal Info */}
-            <CollapsibleSection
-              icon={SECTION_META[0].icon}
-              label={SECTION_META[0].label}
-              open={openSections.personal}
-              onToggle={() => toggleSection("personal")}
-            >
-              <div className="space-y-2">
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <Input placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="text-sm" />
-                  <Input placeholder="Job title" value={title} onChange={(e) => setTitle(e.target.value)} className="text-sm" />
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="text-sm" />
-                  <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="text-sm" />
-                </div>
-                <Input placeholder="Location (e.g. Addis Ababa, Ethiopia)" value={location} onChange={(e) => setLocation(e.target.value)} className="text-sm" />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <Input placeholder="Website (optional)" value={website} onChange={(e) => setWebsite(e.target.value)} className="text-sm" />
-                  <Input placeholder="LinkedIn (optional)" value={linkedin} onChange={(e) => setLinkedin(e.target.value)} className="text-sm" />
-                </div>
-                <Input placeholder="GitHub (optional)" value={github} onChange={(e) => setGithub(e.target.value)} className="text-sm" />
-              </div>
-            </CollapsibleSection>
-
-            {/* Summary */}
-            <CollapsibleSection
-              icon={SECTION_META[1].icon}
-              label={SECTION_META[1].label}
-              open={openSections.summary}
-              onToggle={() => toggleSection("summary")}
-            >
-              <Textarea
-                placeholder="A brief professional summary..."
-                value={summary}
-                onChange={(e) => setSummary(e.target.value)}
-                className="min-h-[90px] text-sm"
-              />
-            </CollapsibleSection>
-
-            {/* Experience */}
-            <CollapsibleSection
-              icon={SECTION_META[2].icon}
-              label={SECTION_META[2].label}
-              open={openSections.experience}
-              onToggle={() => toggleSection("experience")}
-              onAdd={addExperience}
-            >
-              <div className="space-y-3">
-                {experience.map((exp, i) => (
-                  <div key={i} className="rounded-lg border border-border p-3 space-y-2" style={{ position: "relative" }}>
-                    <button onClick={() => removeExperience(i)} className="text-muted-foreground hover:text-destructive" style={{ position: "absolute", top: 8, right: 8 }}>
-                      <Trash2 style={{ width: 14, height: 14 }} />
-                    </button>
-                    <Input placeholder="Job title" value={exp.role} onChange={(e) => updateExperience(i, "role", e.target.value)} className="text-sm" />
-                    <Input placeholder="Company" value={exp.company} onChange={(e) => updateExperience(i, "company", e.target.value)} className="text-sm" />
-                    <Input placeholder="Dates (e.g. 2022 – Present)" value={exp.dates} onChange={(e) => updateExperience(i, "dates", e.target.value)} className="text-sm" />
-                    <Textarea placeholder="Key achievements (one per line)" value={exp.bullets} onChange={(e) => updateExperience(i, "bullets", e.target.value)} className="min-h-[60px] text-sm" />
-                  </div>
-                ))}
-              </div>
-            </CollapsibleSection>
-
-            {/* Education */}
-            <CollapsibleSection
-              icon={SECTION_META[3].icon}
-              label={SECTION_META[3].label}
-              open={openSections.education}
-              onToggle={() => toggleSection("education")}
-              onAdd={addEducation}
-            >
-              <div className="space-y-3">
-                {education.map((edu, i) => (
-                  <div key={i} className="rounded-lg border border-border p-3 space-y-2" style={{ position: "relative" }}>
-                    <button onClick={() => removeEducation(i)} className="text-muted-foreground hover:text-destructive" style={{ position: "absolute", top: 8, right: 8 }}>
-                      <Trash2 style={{ width: 14, height: 14 }} />
-                    </button>
-                    <Input placeholder="Degree" value={edu.degree} onChange={(e) => updateEducation(i, "degree", e.target.value)} className="text-sm" />
-                    <Input placeholder="School" value={edu.school} onChange={(e) => updateEducation(i, "school", e.target.value)} className="text-sm" />
-                    <Input placeholder="Year" value={edu.year} onChange={(e) => updateEducation(i, "year", e.target.value)} className="text-sm" />
-                  </div>
-                ))}
-              </div>
-            </CollapsibleSection>
-
-            {/* Skills */}
-            <CollapsibleSection
-              icon={SECTION_META[4].icon}
-              label={SECTION_META[4].label}
-              open={openSections.skills}
-              onToggle={() => toggleSection("skills")}
-            >
-              <Input
-                placeholder="React, Python, Node.js, ..."
-                value={skills}
-                onChange={(e) => setSkills(e.target.value)}
-                className="text-sm"
-              />
-            </CollapsibleSection>
-
-            {/* Projects */}
-            <CollapsibleSection
-              icon={SECTION_META[5].icon}
-              label={SECTION_META[5].label}
-              open={openSections.projects}
-              onToggle={() => toggleSection("projects")}
-              onAdd={addProject}
-            >
-              <div className="space-y-3">
-                {projects.map((proj, i) => (
-                  <div key={i} className="rounded-lg border border-border p-3 space-y-2" style={{ position: "relative" }}>
-                    <button onClick={() => removeProject(i)} className="text-muted-foreground hover:text-destructive" style={{ position: "absolute", top: 8, right: 8 }}>
-                      <Trash2 style={{ width: 14, height: 14 }} />
-                    </button>
-                    <Input placeholder="Project name" value={proj.title} onChange={(e) => updateProject(i, "title", e.target.value)} className="text-sm" />
-                    <Textarea placeholder="Description" value={proj.description} onChange={(e) => updateProject(i, "description", e.target.value)} className="min-h-[50px] text-sm" />
-                  </div>
-                ))}
-              </div>
-            </CollapsibleSection>
-          </div>
-        </div>
+  const formPanel = (
+    <div className="flex flex-col overflow-hidden bg-background h-full">
+      {/* Panel header */}
+      <div className="px-4 sm:px-5 py-3 border-b border-border flex items-center justify-between gap-2 shrink-0">
+        <h1 className="text-lg font-bold truncate">{t("buildCv")}</h1>
+        <Button
+          size="sm"
+          onClick={handleDownloadPdf}
+          disabled={downloadingPdf}
+          className="rounded-full gap-2 shrink-0"
+        >
+          {downloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+          <span className="hidden xs:inline">{downloadingPdf ? "Creating PDF…" : "PDF"}</span>
+        </Button>
       </div>
 
-      {/* ========== RIGHT PANEL — Live Preview ========== */}
-      <div
-        style={{
-          overflow: "auto",
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "center",
-          padding: 32,
-          background: "hsl(var(--muted) / 0.5)",
-        }}
-      >
-        <div
-          ref={previewContainerRef}
-          style={{
-            width: 680,
-            minHeight: 960,
-            boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
-            borderRadius: 2,
-            transformOrigin: "top center",
-          }}
-        >
-          <PreviewComponent data={previewData} />
+      {/* Scrollable form */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Template picker */}
+        <div className="px-4 sm:px-5 py-4 border-b border-border">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            Template
+          </p>
+          <div className="grid grid-cols-3 gap-2.5">
+            {TEMPLATES.map((tpl) => {
+              const Comp = templateComponents[tpl.id];
+              const isActive = templateId === tpl.id;
+              return (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => setTemplateId(tpl.id)}
+                  className={`relative rounded-lg border-2 overflow-hidden text-left cursor-pointer transition-all ${
+                    isActive ? "border-primary shadow-[0_0_0_3px_rgba(var(--primary),0.15)]" : "border-border"
+                  }`}
+                >
+                  <div className="h-20 overflow-hidden relative bg-muted/30">
+                    <div style={{ transform: "scale(0.16)", transformOrigin: "top left", width: "625%", height: "625%", pointerEvents: "none" }}>
+                      <Comp data={sampleData} />
+                    </div>
+                  </div>
+                  <div className="bg-background border-t border-border px-2 py-1 flex items-center justify-between">
+                    <span className="text-[11px] font-medium">{tpl.name}</span>
+                    {isActive && (
+                      <div className="bg-primary w-4 h-4 rounded-full flex items-center justify-center">
+                        <Check className="text-primary-foreground w-2.5 h-2.5" />
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Form sections */}
+        <div className="divide-y divide-border">
+          <CollapsibleSection
+            icon={SECTION_META[0].icon}
+            label={SECTION_META[0].label}
+            open={openSections.personal}
+            onToggle={() => toggleSection("personal")}
+          >
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Input placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="text-sm" />
+                <Input placeholder="Job title" value={title} onChange={(e) => setTitle(e.target.value)} className="text-sm" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="text-sm" />
+                <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="text-sm" />
+              </div>
+              <Input placeholder="Location (e.g. Addis Ababa, Ethiopia)" value={location} onChange={(e) => setLocation(e.target.value)} className="text-sm" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Input placeholder="Website (optional)" value={website} onChange={(e) => setWebsite(e.target.value)} className="text-sm" />
+                <Input placeholder="LinkedIn (optional)" value={linkedin} onChange={(e) => setLinkedin(e.target.value)} className="text-sm" />
+              </div>
+              <Input placeholder="GitHub (optional)" value={github} onChange={(e) => setGithub(e.target.value)} className="text-sm" />
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            icon={SECTION_META[1].icon}
+            label={SECTION_META[1].label}
+            open={openSections.summary}
+            onToggle={() => toggleSection("summary")}
+          >
+            <Textarea
+              placeholder="A brief professional summary..."
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              className="min-h-[90px] text-sm"
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            icon={SECTION_META[2].icon}
+            label={SECTION_META[2].label}
+            open={openSections.experience}
+            onToggle={() => toggleSection("experience")}
+            onAdd={addExperience}
+          >
+            <div className="space-y-3">
+              {experience.map((exp, i) => (
+                <div key={i} className="rounded-lg border border-border p-3 space-y-2 relative">
+                  <button onClick={() => removeExperience(i)} className="text-muted-foreground hover:text-destructive absolute top-2 right-2">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <Input placeholder="Job title" value={exp.role} onChange={(e) => updateExperience(i, "role", e.target.value)} className="text-sm" />
+                  <Input placeholder="Company" value={exp.company} onChange={(e) => updateExperience(i, "company", e.target.value)} className="text-sm" />
+                  <Input placeholder="Dates (e.g. 2022 – Present)" value={exp.dates} onChange={(e) => updateExperience(i, "dates", e.target.value)} className="text-sm" />
+                  <Textarea placeholder="Key achievements (one per line)" value={exp.bullets} onChange={(e) => updateExperience(i, "bullets", e.target.value)} className="min-h-[60px] text-sm" />
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            icon={SECTION_META[3].icon}
+            label={SECTION_META[3].label}
+            open={openSections.education}
+            onToggle={() => toggleSection("education")}
+            onAdd={addEducation}
+          >
+            <div className="space-y-3">
+              {education.map((edu, i) => (
+                <div key={i} className="rounded-lg border border-border p-3 space-y-2 relative">
+                  <button onClick={() => removeEducation(i)} className="text-muted-foreground hover:text-destructive absolute top-2 right-2">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <Input placeholder="Degree" value={edu.degree} onChange={(e) => updateEducation(i, "degree", e.target.value)} className="text-sm" />
+                  <Input placeholder="School" value={edu.school} onChange={(e) => updateEducation(i, "school", e.target.value)} className="text-sm" />
+                  <Input placeholder="Year" value={edu.year} onChange={(e) => updateEducation(i, "year", e.target.value)} className="text-sm" />
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            icon={SECTION_META[4].icon}
+            label={SECTION_META[4].label}
+            open={openSections.skills}
+            onToggle={() => toggleSection("skills")}
+          >
+            <Input
+              placeholder="React, Python, Node.js, ..."
+              value={skills}
+              onChange={(e) => setSkills(e.target.value)}
+              className="text-sm"
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            icon={SECTION_META[5].icon}
+            label={SECTION_META[5].label}
+            open={openSections.projects}
+            onToggle={() => toggleSection("projects")}
+            onAdd={addProject}
+          >
+            <div className="space-y-3">
+              {projects.map((proj, i) => (
+                <div key={i} className="rounded-lg border border-border p-3 space-y-2 relative">
+                  <button onClick={() => removeProject(i)} className="text-muted-foreground hover:text-destructive absolute top-2 right-2">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <Input placeholder="Project name" value={proj.title} onChange={(e) => updateProject(i, "title", e.target.value)} className="text-sm" />
+                  <Textarea placeholder="Description" value={proj.description} onChange={(e) => updateProject(i, "description", e.target.value)} className="min-h-[50px] text-sm" />
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
         </div>
       </div>
     </div>
+  );
+
+  const previewPanel = (
+    <div
+      ref={previewWrapperRef}
+      className="flex-1 overflow-auto flex items-start justify-center p-4 md:p-8 bg-muted/50"
+    >
+      <div
+        ref={previewContainerRef}
+        style={{
+          width: 680,
+          minHeight: 960,
+          boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+          borderRadius: 2,
+          transformOrigin: "top center",
+          transform: previewScale < 1 ? `scale(${previewScale})` : undefined,
+        }}
+      >
+        <PreviewComponent data={previewData} />
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* ===== Desktop: side-by-side ===== */}
+      <div className="hidden md:grid md:grid-cols-[420px_1fr]" style={{ height: "calc(100vh - 60px)", overflow: "hidden" }}>
+        <div className="border-r border-border overflow-hidden">
+          {formPanel}
+        </div>
+        {previewPanel}
+      </div>
+
+      {/* ===== Mobile: tabbed ===== */}
+      <div className="flex flex-col md:hidden" style={{ height: "calc(100vh - 60px)" }}>
+        {/* Tab bar */}
+        <div className="flex border-b border-border bg-background shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobileTab("form")}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+              mobileTab === "form"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <PenLine className="h-4 w-4" />
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("preview")}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+              mobileTab === "preview"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Eye className="h-4 w-4" />
+            Preview
+          </button>
+        </div>
+
+        {/* Active panel */}
+        <div className="flex-1 overflow-hidden">
+          {mobileTab === "form" ? formPanel : previewPanel}
+        </div>
+      </div>
+    </>
   );
 }
 

@@ -145,23 +145,47 @@ function normalizeCvSectionsToDraft(raw: unknown): CVData | null {
   };
 }
 
-/** When backend returns raw JSON as analysis (e.g. parsing failed), parse it into StructuredAnalysis for the UI */
-function parseStructuredFromAnalysis(analysis: string): StructuredAnalysis | null {
-  const raw = analysis.trim();
-  if (!raw || (raw[0] !== "{" && raw[0] !== "[")) return null;
-  let data: Record<string, unknown>;
-  try {
-    const fixed = raw.replace(/,\s*([}\]])/g, "$1");
-    data = JSON.parse(fixed) as Record<string, unknown>;
-  } catch {
+/**
+ * Best-effort JSON extraction: strips code fences, leading/trailing garbage,
+ * trailing commas, and control characters that Gemini sometimes emits.
+ */
+function robustJsonParse(input: string): Record<string, unknown> | null {
+  let text = input.trim();
+  if (!text) return null;
+
+  // Strip markdown code fences: ```json ... ``` or ``` ... ```
+  text = text.replace(/^```(?:\w*)\s*\n?/m, "").replace(/\n?\s*```\s*$/m, "");
+  text = text.trim();
+
+  // Isolate the outermost { ... } or [ ... ]
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  text = text.slice(start, end + 1);
+
+  const attempts = [
+    text,
+    text.replace(/,\s*([}\]])/g, "$1"),
+    text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "").replace(/,\s*([}\]])/g, "$1"),
+  ];
+
+  for (const candidate of attempts) {
     try {
-      const controlCleaned = raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
-      data = JSON.parse(controlCleaned.replace(/,\s*([}\]])/g, "$1")) as Record<string, unknown>;
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
     } catch {
-      return null;
+      // continue
     }
   }
-  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  return null;
+}
+
+/** When backend returns raw JSON as analysis (e.g. parsing failed), parse it into StructuredAnalysis for the UI */
+function parseStructuredFromAnalysis(analysis: string): StructuredAnalysis | null {
+  const data = robustJsonParse(analysis);
+  if (!data) return null;
 
   const num = (v: unknown, d: number) => {
     if (typeof v === "number" && !Number.isNaN(v)) return Math.max(0, Math.min(100, Math.round(v)));
@@ -505,15 +529,27 @@ export default function ResumeAnalyzer() {
         toast.error((data as { error?: string }).error || t("errorTryAgain"));
         return;
       }
-      setAnalysis((data as { analysis: string }).analysis || "");
       const rawStructured = (data as { structured?: StructuredAnalysis }).structured ?? null;
       const analysisStr = (data as { analysis?: string }).analysis || "";
+
+      // If the analysis field itself is JSON that contains an "analysis" sub-field, extract it
+      let displayAnalysis = analysisStr;
+      if (!rawStructured && analysisStr) {
+        const inlineJson = robustJsonParse(analysisStr);
+        if (inlineJson) {
+          const innerAnalysis = inlineJson.analysis;
+          if (typeof innerAnalysis === "string" && innerAnalysis.trim()) {
+            displayAnalysis = innerAnalysis;
+          }
+        }
+      }
+      setAnalysis(displayAnalysis);
+
       if (rawStructured) {
         setStructured(rawStructured);
-      } else if (analysisStr && analysisStr.trim().startsWith("{")) {
+      } else if (analysisStr) {
         const parsed = parseStructuredFromAnalysis(analysisStr);
-        if (parsed) setStructured(parsed);
-        else setStructured(null);
+        setStructured(parsed);
       } else {
         setStructured(null);
       }
@@ -1239,22 +1275,9 @@ function AnalysisDisplay({ analysis }: { analysis: string }) {
   const fg = "var(--foreground)";
   const accent = "var(--success)";
 
-  // If analysis is JSON, render structured sections instead of raw text
-  const trimmed = analysis.trim();
-  if (trimmed.startsWith("{")) {
-    let data: Record<string, unknown> | undefined;
-    try {
-      const fixed = trimmed.replace(/,\s*([}\]])/g, "$1");
-      data = JSON.parse(fixed) as Record<string, unknown>;
-    } catch {
-      try {
-        const controlCleaned = trimmed.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
-        data = JSON.parse(controlCleaned.replace(/,\s*([}\]])/g, "$1")) as Record<string, unknown>;
-      } catch {
-        data = undefined;
-      }
-    }
-    if (data && typeof data === "object" && !Array.isArray(data)) {
+  // Try to parse JSON from the analysis string (handles code fences, trailing commas, etc.)
+  const data = robustJsonParse(analysis);
+  if (data) {
       const score = (v: unknown) => (typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : null);
       const list = (v: unknown): string[] => (Array.isArray(v) ? v.map((s) => String(s).trim()).filter(Boolean) : []);
       const text = (v: unknown) => (v != null && String(v).trim() ? String(v).trim() : "");
@@ -1307,11 +1330,11 @@ function AnalysisDisplay({ analysis }: { analysis: string }) {
           )}
         </div>
       );
-    }
   }
 
   // If content looks like unparseable JSON, show a short message instead of raw dump
-  if (trimmed.startsWith("{") && trimmed.length > 200) {
+  const trimmed = analysis.trim();
+  if ((trimmed.startsWith("{") || trimmed.includes("```")) && trimmed.length > 200) {
     return (
       <div className={analysisContainerClass}>
         <p className="text-muted-foreground mb-3">

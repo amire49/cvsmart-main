@@ -257,9 +257,15 @@ export default function BuildCvPage() {
   };
 
   const handleDownloadPdf = async () => {
+    if (!previewContainerRef.current) {
+      setMobileTab("preview");
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
+    }
     const container = previewContainerRef.current;
     if (!container) {
-      toast.error("Preview not ready");
+      toast.error("Switch to the Preview tab first");
       return;
     }
     setDownloadingPdf(true);

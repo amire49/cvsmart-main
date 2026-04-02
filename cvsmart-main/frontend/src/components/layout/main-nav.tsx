@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import {
@@ -41,15 +42,19 @@ function oauthAvatarFromUser(user: Session["user"] | undefined): string | null {
 
 const AccountAvatarTrigger = React.forwardRef<
   HTMLButtonElement,
-  { avatarUrl: string | null }
->(function AccountAvatarTrigger({ avatarUrl }, ref) {
+  React.ComponentPropsWithoutRef<"button"> & { avatarUrl: string | null }
+>(function AccountAvatarTrigger({ avatarUrl, className, ...props }, ref) {
   return (
     <Button
       ref={ref}
       variant="ghost"
       size="icon"
-      className="rounded-full h-10 w-10 p-0 ring-1 ring-border hover:ring-accent focus-visible:ring-ring shrink-0"
+      className={cn(
+        "rounded-full h-10 w-10 p-0 ring-1 ring-border hover:ring-accent focus-visible:ring-ring shrink-0",
+        className
+      )}
       aria-label="Open account menu"
+      {...props}
     >
       <Avatar className="h-9 w-9 rounded-full border-2 border-transparent">
         {avatarUrl ? (
@@ -187,27 +192,30 @@ export function MainNav() {
         </div>
       )}
       {userEmail && <DropdownMenuSeparator className="bg-border my-1" />}
-      <DropdownMenuItem asChild className="rounded-lg py-2.5 cursor-pointer focus:bg-accent">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <LayoutDashboard className="h-4 w-4 shrink-0" />
-          <span>{t("dashboard")}</span>
-        </Link>
+      <DropdownMenuItem
+        onSelect={() => router.push("/dashboard")}
+        className="rounded-lg py-2.5 cursor-pointer focus:bg-accent flex items-center gap-2"
+      >
+        <LayoutDashboard className="h-4 w-4 shrink-0" />
+        <span>{t("dashboard")}</span>
       </DropdownMenuItem>
-      <DropdownMenuItem asChild className="rounded-lg py-2.5 cursor-pointer focus:bg-accent">
-        <Link href="/profile" className="flex items-center gap-2">
-          <User className="h-4 w-4 shrink-0" />
-          <span>{t("profile")}</span>
-        </Link>
+      <DropdownMenuItem
+        onSelect={() => router.push("/profile")}
+        className="rounded-lg py-2.5 cursor-pointer focus:bg-accent flex items-center gap-2"
+      >
+        <User className="h-4 w-4 shrink-0" />
+        <span>{t("profile")}</span>
       </DropdownMenuItem>
-      <DropdownMenuItem asChild className="rounded-lg py-2.5 cursor-pointer focus:bg-accent">
-        <Link href="/setting" className="flex items-center gap-2">
-          <Settings className="h-4 w-4 shrink-0" />
-          <span>{t("settings")}</span>
-        </Link>
+      <DropdownMenuItem
+        onSelect={() => router.push("/setting")}
+        className="rounded-lg py-2.5 cursor-pointer focus:bg-accent flex items-center gap-2"
+      >
+        <Settings className="h-4 w-4 shrink-0" />
+        <span>{t("settings")}</span>
       </DropdownMenuItem>
       <DropdownMenuSeparator className="bg-border my-1" />
       <DropdownMenuItem
-        onClick={handleLogout}
+        onSelect={handleLogout}
         className="rounded-lg py-2.5 cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive flex items-center gap-2"
       >
         <LogOut className="h-4 w-4 shrink-0" />
